@@ -10,12 +10,13 @@ consensus and the CID hash function.
 
 ## Status
 
-- `SPEC.md` — v0.2 draft. CC0. Changelog at the top of the file.
+- `SPEC.md` — v0.3 draft. CC0. Changelog at the top of the file.
 - `/conformance/` — JSON test vectors + recorded mainnet fixtures. CC0.
 - `/adapters/flow-topshot/` — reference adapter, MIT. All three Flow vectors
   round-trip offline against fixtures and live against Flow mainnet + dweb.link.
-- `/adapters/erc721-generic/` — reference adapter, MIT. Live-only; fixtures
-  are iter-4 scope.
+- `/adapters/erc721-generic/` — reference adapter, MIT. Both ERC-721 vectors
+  (Azuki #9999 pass + image-tampered fail) round-trip offline and live against
+  Ethereum mainnet + dweb.link.
 - Live Example 1: [topshot-auth-portal.vercel.app](https://topshot-auth-portal.vercel.app)
   — verifies `A.0b2a3299cc857e29.TopShot` on Flow mainnet under this spec.
 
@@ -40,20 +41,19 @@ node adapters/flow-topshot/verify.js \
   --token-id 40105574 \
   --holder 0x0bb3b2a249ca6822
 
-# Verify one ERC-721 token end-to-end
+# Verify one live Azuki (ERC-721) token against Ethereum mainnet + dweb.link
 node adapters/erc721-generic/verify.js \
-  --rpc https://cloudflare-eth.com \
-  --contract 0xb47e3cd837ddf8e4c57f05d70ab865de6e193bbb \
-  --token-id 100
+  --contract 0xED5AF388653567Af2F388E6224dC7C4b3241C544 \
+  --token-id 9999
 ```
 
 Both adapters print the same five-step result envelope:
 
 ```json
 {
-  "spec_version": "0.2",
+  "spec_version": "0.3",
   "result": "conforming",
-  "fields": { "chain": "...", "holder": "...", "media_cid": "...", ... },
+  "fields": { "chain": "...", "holder": "...", "media_cid": "...", "metadata_cid": "...", ... },
   "steps": [
     {"step": 1, "name": "read_chain_fields", "ok": true},
     {"step": 2, "name": "serial_in_range",  "ok": true},
@@ -73,15 +73,14 @@ An implementation is **conforming** if it produces the expected
 # Offline — every network call is served from conformance/fixtures/.
 # No RPC, no gateway, no flaky tests. Reproducible by anyone with Node 18+.
 node conformance/run.js adapters/flow-topshot/verify.js
+node conformance/run.js adapters/erc721-generic/verify.js
 
-# Live — replay each vector against Flow mainnet + dweb.link.
+# Live — replay each vector against the live chain + dweb.link.
 OPO_LIVE=1 node conformance/run.js adapters/flow-topshot/verify.js
-
-# ERC-721 is currently live-only (fixtures: iter-4 scope).
 OPO_LIVE=1 node conformance/run.js adapters/erc721-generic/verify.js
 ```
 
-Expected offline output for the Flow adapter:
+Expected offline output:
 
 ```
 harness=OFFLINE  adapter=flow-topshot  vectors=3
@@ -89,6 +88,11 @@ harness=OFFLINE  adapter=flow-topshot  vectors=3
 PASS: flow-topshot-pass-1
 PASS: flow-topshot-fail-step2-serial-out-of-range
 PASS: flow-topshot-fail-step3-cid-tampered
+
+harness=OFFLINE  adapter=erc721-generic  vectors=2
+
+PASS: erc721-azuki-9999-pass
+PASS: erc721-azuki-9999-fail-step3-image-tampered
 ```
 
 ## Repository layout

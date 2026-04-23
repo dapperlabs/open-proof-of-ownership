@@ -1,5 +1,5 @@
 {
-  "spec_version": "0.2",
+  "spec_version": "0.3",
   "vectors": [
     {
       "id": "flow-topshot-pass-1",
@@ -58,33 +58,42 @@
       "notes": "Real Flow response + IPFS raw block with a single trailing byte appended. sha256 no longer matches the multihash digest declared by CIDv0 QmQbn…smKR — exercises SPEC §4 step 3."
     },
     {
-      "id": "erc721-pass-1",
+      "id": "erc721-azuki-9999-pass",
       "adapter": "erc721-generic",
       "input": {
         "chain": "ethereum-mainnet",
-        "contract": "0xb47e3cd837ddf8e4c57f05d70ab865de6e193bbb",
-        "token_id": "100"
+        "contract": "0xED5AF388653567Af2F388E6224dC7C4b3241C544",
+        "token_id": "9999"
       },
+      "fixture": "fixtures/erc721-azuki-9999-pass",
       "expected": {
         "result": "conforming",
         "failed_step": null,
-        "fields_present": ["chain", "contract", "token_id", "edition_id", "serial", "edition_size", "holder", "media_cid", "metadata_cid"]
+        "fields_present": ["chain", "contract", "token_id", "edition_id", "serial", "edition_size", "holder", "media_cid", "metadata_cid"],
+        "field_values": {
+          "edition_size": 10000,
+          "serial": 9999,
+          "holder": "0x4b0207e11661e41b091697980b3d49bd59358d7c",
+          "metadata_cid": "Qme4i1jbJvY8mfDWfFXLKh1ZLy1WtKh4edHXdFWfA61Fps",
+          "media_cid": "QmfQbRhnw6jLPyqf9zDmT6nMbAwZzfHh26XKdKN3cka6Kr"
+        }
       },
-      "notes": "ERC-721 adapter has no fixture yet; live runs require an RPC + IPFS tokenURI. Iteration 4 scope: record a fixture against a known ipfs:// tokenURI contract."
+      "notes": "Real mainnet Azuki #9999 at 0x4b0207e11661e41b091697980b3d49bd59358d7c. tokenURI returns `ipfs://QmZcH4Yv…3u4/9999` (directory + path); the adapter resolves the leaf metadata CID `Qme4i1j…Fps`, hashes the raw block against that CID, extracts `image: ipfs://QmYDvP…1hg/9999.png`, resolves the image root CID `QmfQbR…6Kr`, and hashes that block. Live re-run: `OPO_LIVE=1 node conformance/run.js adapters/erc721-generic/verify.js --vector erc721-azuki-9999-pass`."
     },
     {
-      "id": "erc721-fail-no-cid",
+      "id": "erc721-azuki-9999-fail-step3-image-tampered",
       "adapter": "erc721-generic",
       "input": {
         "chain": "ethereum-mainnet",
-        "contract": "0x0000000000000000000000000000000000000000",
-        "token_id": "1"
+        "contract": "0xED5AF388653567Af2F388E6224dC7C4b3241C544",
+        "token_id": "9999"
       },
+      "fixture": "fixtures/erc721-azuki-9999-fail-step3",
       "expected": {
         "result": "not_conforming",
-        "failed_step": 1
+        "failed_step": 3
       },
-      "notes": "Zero-address contract — RPC returns no tokenURI. Exercises step 1 failure. Live-only (no fixture)."
+      "notes": "Real RPC + metadata fixture for Azuki #9999 with a single 0xFF byte appended to the image root block `QmfQbR…6Kr`. sha256 no longer matches the declared multihash digest — exercises SPEC §4 step 3 for a path-resolved media leaf."
     }
   ]
 }

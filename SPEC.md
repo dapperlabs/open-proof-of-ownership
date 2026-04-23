@@ -1,16 +1,36 @@
-# Open Proof-of-Ownership (OPO) — Specification v0.2
+# Open Proof-of-Ownership (OPO) — Specification v0.3
 
 **Status:** Draft
 **License:** CC0 1.0 Universal (public domain)
 **Editors:** Initial publication, 2026-04
 **Repository:** github.com/dapperlabs/open-proof-of-ownership
 
+## Changes from v0.2
+
+- §4 step 3 extended to admit **path-resolved retrieval** for chain-pinned
+  manifests whose tokenURI is a directory reference (`ipfs://<dirCID>/<path>`).
+  A verifier MAY accept a leaf CID returned by a non-issuer gateway so long
+  as it cryptographically verifies the retrieved bytes against that CID;
+  the dominant ERC-721 pattern (`baseURI + tokenId`) relies on this.
+- §5 trust assumptions updated to name the path-resolution case: the
+  verifier trusts the gateway's HAMT/directory traversal to the extent of
+  "this leaf CID IS the file at <path>" and independently verifies its
+  bytes.
+- §8 clarifies that adapters implementing path resolution MUST report the
+  resolved leaf CID as `metadata_cid` / `media_cid` (not the declared
+  directory CID).
+
 ## Changes from v0.1
 
-- §3: `metadata_cid` demoted from REQUIRED to OPTIONAL; a new "chain-as-manifest" clause in §4 permits its omission when chain-state exposes the equivalent fields directly.
-- §3: `media_cid` accepts any CID (v0 or v1) whose multihash is sha2-256; v0.1 required CIDv1 exclusively, which excluded a majority of issued Flow and Ethereum NFTs.
+- §3: `metadata_cid` demoted from REQUIRED to OPTIONAL; a new "chain-as-manifest"
+  clause in §4 permits its omission when chain-state exposes the equivalent
+  fields directly.
+- §3: `media_cid` accepts any CID (v0 or v1) whose multihash is sha2-256; v0.1
+  required CIDv1 exclusively, which excluded a majority of issued Flow and
+  Ethereum NFTs.
 - §4: step 4 clarified for the two cases (pinned-manifest vs chain-as-manifest).
-- §7: conformance harness MUST support an offline fixture mode; live mode is OPTIONAL.
+- §7: conformance harness MUST support an offline fixture mode; live mode is
+  OPTIONAL.
 
 ## 1. Scope
 
@@ -37,8 +57,11 @@ document are to be interpreted as described in BCP 14 (RFC 2119, RFC 8174).
   explicit codec and multihash) are in scope.
 - **Holder**: the account currently controlling the token per chain consensus.
 - **Verifier**: an independent process executing this specification.
-- **Chain-pinned manifest**: a document whose CID is itself stored on-chain
-  under a known binding and whose JSON contains OPO-shaped fields.
+- **Chain-pinned manifest**: a document whose CID — or a directory reference
+  resolvable to a unique file CID — is stored on-chain under a known binding
+  and whose JSON contains OPO-shaped fields.
+- **Directory reference**: an `ipfs://<dirCID>/<path>` URI whose leaf
+  resolution is deterministic given the directory's UnixFS structure.
 
 ## 3. Required Fields
 
@@ -55,13 +78,14 @@ from public chain-state OR public content-addressed retrieval:
 | `edition_size` | REQUIRED | integer | chain |
 | `holder` | REQUIRED | string | chain |
 | `media_cid` | REQUIRED | string (CID, sha2-256 multihash) | chain or chain-pinned manifest |
-| `metadata_cid` | OPTIONAL | string (CID, sha2-256 multihash) | chain |
+| `metadata_cid` | OPTIONAL | string (CID, sha2-256 multihash) | chain or chain-pinned manifest |
 
 A field is "from chain" if its value is derivable from a stateless read of a
 public RPC endpoint or block explorer for the named contract.
 
 A field is "from chain-pinned manifest" if it appears in a document whose CID
-is itself stored on-chain under a binding the adapter declares.
+— or a directory reference resolvable to a unique file CID under that
+directory — is itself stored on-chain under a binding the adapter declares.
 
 If `metadata_cid` is absent, all chain-sourced fields MUST be internally
 consistent (see §4, step 4).
@@ -81,9 +105,22 @@ A verifier MUST, for any token under test:
    report step 3. Gateways MUST be invoked in raw-block mode (e.g. the
    `?format=raw` query or `Accept: application/vnd.ipld.raw` header); a
    UnixFS-decoded response will not hash to the CID of a wrapped file.
-4. If `metadata_cid` is present ("pinned-manifest case"): resolve it and
-   retrieve the JSON. The JSON MUST contain `edition_id`, `serial`, and a
-   reference to `media_cid` consistent with step 3. Failure: report step 4.
+
+   **Path-resolved retrieval.** When the chain-declared reference is a
+   directory reference `ipfs://<dirCID>/<path>` rather than a direct CID,
+   the verifier MAY request the raw block at `/<dirCID>/<path>` from a
+   non-issuer trustless gateway. The gateway SHALL return the leaf CID
+   (via `x-ipfs-roots` or an ETag of the form `"<cid>.raw"`) and the raw
+   bytes of that leaf. The verifier MUST compute sha2-256 of the bytes and
+   confirm equality with the multihash digest of the returned leaf CID
+   before treating either as trusted. The adapter MUST report the leaf CID
+   as `media_cid` (or `metadata_cid`) — never the declared directory CID.
+4. If `metadata_cid` is present ("pinned-manifest case"): resolve it (by
+   direct CID or path resolution per step 3) and retrieve the JSON. If the
+   manifest declares `edition_id` or `serial`, those MUST match the
+   chain-sourced values. If the manifest declares an `image` (or
+   `image_url`) reference, its resolved leaf CID MUST equal `media_cid`.
+   Failure: report step 4.
 
    If `metadata_cid` is absent ("chain-as-manifest case"): step 4 is
    satisfied iff `edition_id`, `serial`, `edition_size`, and `media_cid`
@@ -102,6 +139,13 @@ A verifier under OPO trusts:
   version).
 - That at least one non-issuer IPFS gateway is reachable and honors raw-block
   retrieval.
+- For path-resolved retrieval only: that the gateway performs UnixFS
+  directory traversal correctly (i.e. returns the actual file at `<path>`
+  under `<dirCID>`). A compromised gateway could return a different file's
+  bytes for the path — the verifier would still detect tampering of the
+  returned bytes against the returned leaf CID, but not substitution of
+  one leaf for another under the same path. A stronger verifier MAY
+  cross-check the same path resolution at a second independent gateway.
 
 A verifier under OPO does NOT trust:
 
@@ -143,7 +187,20 @@ vector against the live chain and at least one non-issuer IPFS gateway.
 An adapter binds OPO field names to a specific chain's read methods. Adapters
 MUST NOT introduce trust in non-chain sources for fields marked "from chain"
 in Section 3. Adapters MUST accept an injectable transport for offline
-conformance. This repository provides reference adapters for:
+conformance.
+
+Adapters implementing path-resolved retrieval (§4 step 3) MUST:
+
+- Use raw-block retrieval at a non-issuer gateway (`?format=raw` or
+  `Accept: application/vnd.ipld.raw`).
+- Parse the leaf CID from the gateway response (the final entry in
+  `x-ipfs-roots`, or the ETag of the form `"<cid>.raw"`).
+- Verify sha2-256 of the returned bytes against the leaf CID's multihash
+  digest before using either.
+- Report the leaf CID — not the declared directory CID — as the
+  `metadata_cid` / `media_cid` field in the result envelope.
+
+This repository provides reference adapters for:
 
 - Flow + Cadence resource model (`/adapters/flow-topshot/`).
 - EVM + ERC-721 with ERC-721 Metadata extension (`/adapters/erc721-generic/`).
@@ -160,6 +217,7 @@ new adapters increment MINOR. Editorial changes increment PATCH.
 - RFC 8174 — Ambiguity of Uppercase vs Lowercase in RFC 2119 Key Words.
 - IPFS — multiformats CID, ipfs.tech/concepts/content-addressing.
 - IPIP-412 — HTTP gateway raw-block responses (`?format=raw`).
+- IPIP-402 — HTTP gateway trustless response headers (`x-ipfs-roots`).
 - W3C Verifiable Credentials Data Model 2.0 — w3.org/TR/vc-data-model-2.0.
 - ERC-721 — eips.ethereum.org/EIPS/eip-721.
 - Flow NFT Metadata Standard (FLIP-0636) — github.com/onflow/flips.
