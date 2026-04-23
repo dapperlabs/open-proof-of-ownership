@@ -10,7 +10,7 @@ consensus and the CID hash function.
 
 ## Status
 
-- `SPEC.md` — v0.5 draft. CC0. Changelog at the top of the file.
+- `SPEC.md` — v0.6 draft. CC0. Changelog at the top of the file.
 - `/conformance/` — JSON test vectors + recorded mainnet fixtures. CC0.
 - `/adapters/flow-topshot/` — reference adapter, MIT. All three Flow vectors
   round-trip offline against fixtures and live against Flow mainnet + dweb.link.
@@ -26,6 +26,16 @@ consensus and the CID hash function.
   Ethereum mainnet + gateway.pinata.cloud (primary) + ipfs.io (cross-check
   secondary, HEAD). The two collections together satisfy SPEC §7.1
   generic-adapter coverage on all three encoding axes.
+- `/adapters/tezos-fa2/` — reference adapter, MIT. Three Tezos vectors on
+  fxhash gentk v1 (`KT1KEa8z…`) against native Tezos L1 RPC
+  (`mainnet.api.tez.ie`, no indexer). Exercises the SPEC §4 step 1
+  **confirmed-holder** branch: FA2's ledger is indexed by
+  `(address, token_id)` and has no `ownerOf(token_id)` primitive, so a
+  claimed holder MUST be input and confirmed against the ledger. The
+  adapter implements Michelson PACK + blake2b-256 + base58check locally
+  to compute `script_expr_hash` without trusting any indexer for the
+  key-hash binding. Three chain families (Flow, EVM, Tezos) together
+  satisfy SPEC §7.2 cross-chain coverage on all three model axes.
 - Live Example 1: [topshot-auth-portal.vercel.app](https://topshot-auth-portal.vercel.app)
   — verifies `A.0b2a3299cc857e29.TopShot` on Flow mainnet under this spec.
 
@@ -64,13 +74,19 @@ node adapters/erc721-generic/verify.js \
 OPO_IPFS_CROSSCHECK=1 node adapters/erc721-generic/verify.js \
   --contract 0xED5AF388653567Af2F388E6224dC7C4b3241C544 \
   --token-id 9999
+
+# Verify one live Tezos fxhash gentk token against mainnet Tezos L1 RPC + IPFS
+node adapters/tezos-fa2/verify.js \
+  --contract KT1KEa8z6vWXDJrVqtMrAeDVzsvxat3kHaCE \
+  --token-id 1 \
+  --holder tz1PoDdN2oyRyF6DA73zTWAWYhNL4UGr3Egj
 ```
 
-Both adapters print the same five-step result envelope:
+All three adapters print the same step-envelope shape:
 
 ```json
 {
-  "spec_version": "0.5",
+  "spec_version": "0.6",
   "result": "conforming",
   "fields": { "chain": "...", "holder": "...", "media_cid": "...", "metadata_cid": "...", ... },
   "steps": [
@@ -93,10 +109,12 @@ An implementation is **conforming** if it produces the expected
 # No RPC, no gateway, no flaky tests. Reproducible by anyone with Node 18+.
 node conformance/run.js adapters/flow-topshot/verify.js
 node conformance/run.js adapters/erc721-generic/verify.js
+node conformance/run.js adapters/tezos-fa2/verify.js
 
 # Live — replay each vector against the live chain + a public IPFS gateway.
 OPO_LIVE=1 node conformance/run.js adapters/flow-topshot/verify.js
 OPO_LIVE=1 node conformance/run.js adapters/erc721-generic/verify.js
+OPO_LIVE=1 node conformance/run.js adapters/tezos-fa2/verify.js
 ```
 
 Expected offline output:
@@ -117,6 +135,12 @@ PASS: erc721-pudgy-1-pass
 PASS: erc721-pudgy-1-pass-crosscheck
 PASS: erc721-pudgy-1-fail-step3-image-tampered
 PASS: erc721-azuki-9999-fail-crosscheck-mismatch
+
+harness=OFFLINE  adapter=tezos-fa2  vectors=3
+
+PASS: tezos-fxhash-gentk-1-pass
+PASS: tezos-fxhash-gentk-1-fail-step1-wrong-holder
+PASS: tezos-fxhash-gentk-1-fail-step3-metadata-tampered
 ```
 
 ## Repository layout
@@ -131,6 +155,7 @@ conformance/
 adapters/
   flow-topshot/              ← Flow + Cadence reference adapter
   erc721-generic/            ← EVM + ERC-721 reference adapter
+  tezos-fa2/                 ← Tezos + FA2 (single-edition) reference adapter
 examples/
   example-1-topshot.md       ← walks through one verified Top Shot Moment
 ```

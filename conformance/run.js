@@ -15,6 +15,7 @@
 //   path-map.json                 -- { "<cid>/<path>": "<leafCid>" } (primary gateway)
 //   path-map-2.json               -- { "<cid>/<path>": "<leafCid>" } (second gateway, optional)
 //   ipfs-<cid>.raw                -- raw IPLD block bytes
+//   bigmap-<id>-<script_expr_hash>.json -- tezos big-map entry (tezos-fa2)
 
 const fs = require("fs");
 const path = require("path");
@@ -58,6 +59,15 @@ function fixtureTransport(fixtureDir) {
       const leafCid = map[key];
       if (!leafCid) throw new Error(`no fixture path-map-2 mapping for ${key}`);
       return { leafCid };
+    },
+    // tezos-fa2
+    async getBigMapValue(bigMapId, scriptExprHash) {
+      const p = path.join(fixtureDir, `bigmap-${bigMapId}-${scriptExprHash}.json`);
+      if (!fs.existsSync(p)) {
+        if (fs.existsSync(p + ".404")) return null;
+        throw new Error(`tezos bigmap fixture missing: ${p}`);
+      }
+      return JSON.parse(fs.readFileSync(p, "utf8"));
     },
     // both
     async getIpfsRaw(cid) {

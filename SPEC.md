@@ -1,9 +1,38 @@
-# Open Proof-of-Ownership (OPO) — Specification v0.5
+# Open Proof-of-Ownership (OPO) — Specification v0.6
 
 **Status:** Draft
 **License:** CC0 1.0 Universal (public domain)
 **Editors:** Initial publication, 2026-04
 **Repository:** github.com/dapperlabs/open-proof-of-ownership
+
+## Changes from v0.5
+
+- §4 step 1 distinguishes **discovered-holder** chains (the chain exposes
+  a `f(token_id) -> holder` primitive such as ERC-721 `ownerOf`) from
+  **confirmed-holder** chains (the chain's ledger is indexed by a
+  composite key containing the holder address, so the verifier cannot
+  learn the holder from chain-state alone and MUST accept `holder` as
+  an input and confirm a non-zero balance at that key). Both branches
+  satisfy §4 step 1. Adapters MUST declare which branch they
+  implement.
+- §5.3 adds a new trust assumption that applies only under the
+  confirmed-holder branch: the verifier cannot derive uniqueness of
+  holder from a single balance check; a chain-wide invariant (FA2 NFT
+  profile's `supply=1`) OR a second read is required to claim
+  "exclusive holder." Adapters bound to single-edition (1/1)
+  profiles MAY pin `edition_size=1` as an adapter declaration, but
+  MUST document this as a profile constraint in §8.
+- §7.2 adds a **cross-chain coverage requirement**: the reference set
+  of adapters in this repository MUST collectively exercise at least
+  three chain families whose ownership/identity models differ along
+  the axes listed in §7.2. The v0.6 reference set (Flow / Cadence
+  resource-storage, EVM / ERC-721 `ownerOf`, Tezos / FA2 composite-
+  key ledger) satisfies this. Adopters implementing OPO for a new
+  chain family SHOULD contribute an adapter exercising an axis not
+  covered by the reference set.
+- §8 lists the new `tezos-fa2` reference adapter and documents the
+  big-map-pointer resolution convention (per-contract, verified once
+  against the contract's `/script` endpoint).
 
 ## Changes from v0.4
 
@@ -137,6 +166,26 @@ A verifier MUST, for any token under test:
    from chain. The read MUST NOT traverse any issuer-operated API. If any
    REQUIRED field cannot be resolved, the token is NOT conforming and the
    verifier MUST report step 1 as the failed step.
+
+   **Discovered-holder branch.** When the chain exposes a
+   `f(contract, token_id) -> holder` primitive (e.g. ERC-721
+   `ownerOf(uint256)`), the verifier reads the holder directly from
+   chain-state.
+
+   **Confirmed-holder branch.** When the chain's ownership ledger is
+   indexed by a composite key containing the holder address (e.g.
+   Tezos FA2 `ledger : (address, nat) -> nat`), the chain does NOT
+   expose a constant-time `ownerOf(token_id)` primitive, and
+   scanning the entire ledger is infeasible without an indexer. In
+   this case the verifier MUST accept `holder` as an input to the
+   verification call AND read the ledger balance at
+   `(holder, token_id)` from chain. Step 1 is satisfied iff the
+   balance is non-zero; the verifier's claim is narrower than the
+   discovered-holder branch ("the claimed holder holds a copy of
+   this token") and does NOT establish exclusivity without the
+   §5.3 assumption. Adapters using the confirmed-holder branch
+   MUST declare this in their README so downstream consumers
+   understand the narrower claim.
 2. Assert `1 <= serial <= edition_size`. Failure: report step 2.
 3. Retrieve the encoded block identified by `media_cid` from at least one
    IPFS gateway NOT operated by the issuer. The sha2-256 of the retrieved
@@ -220,6 +269,33 @@ A verifier under OPO does NOT trust:
 - Any indexer not reproducible from chain-state.
 - Any rendering, marketing, or display surface.
 
+### 5.3 Confirmed-holder uniqueness (FA2 and similar composite-key ledgers)
+
+Under the §4 step 1 confirmed-holder branch, a successful verification
+establishes only that the claimed holder holds a non-zero balance of
+`token_id` under `contract`. It does NOT, by itself, establish that the
+claimed holder is the UNIQUE holder. Two cases are in scope:
+
+- **Profile-constrained uniqueness.** When the contract commits to a
+  profile that pins per-token_id total supply to 1 (e.g. the FA2 "NFT"
+  profile under TZIP-12, or a `mint`-once-and-never-again contract
+  invariant), the verifier MAY rely on that profile to claim
+  exclusivity. The profile itself MUST be a chain-observable commitment
+  (interface tag, entrypoint restriction, immutability marker) and not
+  an off-chain declaration. An adapter that relies on a profile MUST
+  name the profile in its README.
+- **Unconstrained ledgers.** When no supply-1 profile is pinned,
+  exclusivity requires at minimum a second read (e.g. a `total_supply`
+  view, or a `balance_of` over the full holder set bounded by chain
+  indexing). Adapters without access to such a read MUST report their
+  output as "holder confirmed, uniqueness not claimed."
+
+The reference `tezos-fa2` adapter in this repository relies on the
+profile-constrained branch: fxhash gentk v1 mints each token_id as a
+1/1 unique iteration, and the verifier pins `edition_size=1`. A
+verifier re-using this adapter for non-1/1 FA2 contracts MUST override
+both `edition_size` and the uniqueness claim.
+
 ## 6. Out of Scope (Permanent Limits)
 
 The following are NOT verifiable under OPO and MUST NOT be implied by a
@@ -282,6 +358,57 @@ stress the other branches. The reference `erc721-generic` adapter in
 this repository covers all three axes via Azuki (CIDv0 / dag-pb /
 inline) and Pudgy Penguins (CIDv1 / raw / chunked-root).
 
+### 7.2 Cross-chain coverage
+
+The reference set of adapters in this repository MUST collectively
+exercise AT LEAST THREE chain families whose ownership/identity
+models differ along the following axes:
+
+1. **Ownership-lookup primitive.** One family MUST have a constant-
+   time `ownerOf(token_id)` primitive (e.g. EVM / ERC-721). One
+   family MUST require the holder as input and confirm it against a
+   composite-key ledger (e.g. Tezos / FA2, `(address, token_id) ->
+   balance`). One family MUST expose ownership through per-account
+   resource storage rather than a global ownership map (e.g. Flow /
+   Cadence resources scoped to account storage).
+2. **Identity model.** One family MUST use content-addressed
+   contract identity (e.g. Flow's `A.<addr>.<name>` canonical form).
+   One family MUST use raw address hashes (e.g. EVM's
+   `0x<hex40>`). One family MUST use base58check-prefixed addresses
+   with embedded network/curve tags (e.g. Tezos's `tz1…` / `KT1…`).
+3. **On-chain metadata surface.** At least one family MUST store
+   the metadata manifest CID directly on-chain as a string
+   (EVM `tokenURI` return, Tezos `token_metadata` big-map bytes).
+   At least one family MUST reveal the manifest fields through a
+   chain-as-manifest read rather than a pinned manifest (Flow
+   Cadence `MetadataViews`).
+
+These axes are chosen because each one is a place where an adapter
+author could silently assume the wrong model and produce a verifier
+that works for one chain's shape and not another's. A repository
+claiming cross-chain applicability cannot rest on a single chain's
+conventions; the spec is only as portable as its reference set.
+
+Rationale. v0.5's §7.1 closed the "one-chain, two-contracts, all
+hand-picked" critique within a chain family. §7.2 closes the
+parallel "two-chains, both with ERC-721-shaped ownership lookup"
+critique at the chain-family level. The v0.6 reference set (Flow
+Top Shot, ERC-721 Azuki + Pudgy, Tezos FA2 fxhash gentk) covers all
+three axes above.
+
+The v0.6 reference set satisfies §7.2 as follows:
+
+- Axis 1: EVM (Azuki / Pudgy) supplies constant-time `ownerOf`;
+  Tezos (fxhash gentk v1) supplies composite-key ledger confirmation;
+  Flow (Top Shot) supplies per-account resource storage.
+- Axis 2: Flow supplies `A.0b2a3299cc857e29.TopShot` canonical
+  identity; EVM supplies `0xED5AF388…`; Tezos supplies
+  `KT1KEa8z…` and `tz1PoDdN…`.
+- Axis 3: Tezos supplies on-chain CID storage via
+  `token_metadata` big-map bytes; EVM supplies on-chain CID
+  storage via `tokenURI` string; Flow supplies chain-as-manifest
+  via `MetadataViews` resource field reads.
+
 ## 8. Adapters
 
 An adapter binds OPO field names to a specific chain's read methods. Adapters
@@ -315,6 +442,29 @@ This repository provides reference adapters for:
 
 - Flow + Cadence resource model (`/adapters/flow-topshot/`).
 - EVM + ERC-721 with ERC-721 Metadata extension (`/adapters/erc721-generic/`).
+- Tezos + FA2 single-edition profile (`/adapters/tezos-fa2/`).
+
+### 8.1 Tezos FA2 adapter specifics
+
+The `tezos-fa2` reference adapter uses the confirmed-holder branch
+(§4 step 1) and is bound to FA2 contracts whose `token_metadata`
+big-map value is of the canonical `pair nat (map string bytes)`
+shape (TZIP-12 Section 3) with the manifest URI under the empty
+string key. Each chain read is a native Tezos RPC call against
+`/chains/main/blocks/head/context/big_maps/{ptr}/{script_expr_hash}`;
+no indexer (tzkt / Blockwatch / dipdup) is consulted. The adapter
+computes `script_expr_hash` locally (Michelson PACK →
+blake2b-256 → base58check with the `expr` prefix `0d2c401b`) so
+that the only trust placed in the RPC is for the VALUE at a given
+(big-map-pointer, key-hash) tuple — the key-hash binding itself is
+derived client-side.
+
+Big-map pointer IDs (e.g. `ledger=22785`, `token_metadata=22789`
+for KT1KEa8z…) are discovered by reading the contract's `/script`
+endpoint once and matching them by path-annotation. The adapter
+SHOULD ship a pointer table keyed by contract address rather than
+re-reading the script on every verification; re-derivation is
+needed only when the pointer table is updated.
 
 ## 9. Versioning
 

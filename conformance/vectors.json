@@ -1,5 +1,5 @@
 {
-  "spec_version": "0.5",
+  "spec_version": "0.6",
   "vectors": [
     {
       "id": "flow-topshot-pass-1",
@@ -190,6 +190,63 @@
         "failed_step": 3
       },
       "notes": "Synthetic fixture where the second gateway returns a different leaf CID for the tokenURI directory path. Models a substitution attack scenario: a compromised primary gateway returns bytes that hash to a substituted leaf CID; the independent second gateway's path resolution disagrees, and the verifier fails step 3 on `crosscheck mismatch`. Exercises SPEC v0.4 §4 step 3 crosscheck branch."
+    },
+    {
+      "id": "tezos-fxhash-gentk-1-pass",
+      "adapter": "tezos-fa2",
+      "input": {
+        "chain": "tezos-mainnet",
+        "contract": "KT1KEa8z6vWXDJrVqtMrAeDVzsvxat3kHaCE",
+        "token_id": "1",
+        "holder": "tz1PoDdN2oyRyF6DA73zTWAWYhNL4UGr3Egj"
+      },
+      "fixture": "fixtures/tezos-fxhash-gentk-1",
+      "expected": {
+        "result": "conforming",
+        "failed_step": null,
+        "fields_present": ["chain", "contract", "token_id", "edition_id", "serial", "edition_size", "holder", "media_cid", "metadata_cid"],
+        "field_values": {
+          "edition_id": "KT1KEa8z6vWXDJrVqtMrAeDVzsvxat3kHaCE:1",
+          "serial": 1,
+          "edition_size": 1,
+          "holder": "tz1PoDdN2oyRyF6DA73zTWAWYhNL4UGr3Egj",
+          "metadata_cid": "QmagGPYiTPQQV1i9WMwGQ2zhgDeWqHefgtbBmWwGkr7tbY",
+          "media_cid": "QmavLKtFyHcYvtRMBEyLEJT2ziQmM5VQ2X9HsvRgpCSL4d"
+        }
+      },
+      "notes": "Real mainnet FXHASH GENTK token 1 (`FXHASH Generative Logo #2`, artist ciphrd, minted 2021-11). First Tezos FA2 conformance vector: verifies against Tezos native RPC (no indexer) at mainnet.api.tez.ie (ECAD Labs). The adapter does NOT call tzkt.io. Two chain reads: (a) ledger big-map 22785 at script_expr_hash(pack(Pair tz1PoDdN..., 1)) = `exprvF4Mr36o3tTwvjYUkXxEaCrChqBJL86DAXRoYjn4dzTyqXDXzE` — returns `{int:\"1\"}` (balance=1 confirms holder); (b) token_metadata big-map 22789 at script_expr_hash(pack(nat 1)) = `expru2dKqDfZG8hu4wNGkiyunvq2hdSKuVYtcKta7BWP6Q18oNxKjS` — returns Pair(1, {\"\": 0x697066733a2f2f516d...}) whose bytes decode to `ipfs://QmagGP...tbY`. The manifest's `artifactUri` resolves to `ipfs://QmavLK...L4d`. Both CIDv0 blocks fetched from gateway.pinata.cloud and hashed sha2-256 against their multihash digests. Live re-run: `OPO_LIVE=1 node conformance/run.js adapters/tezos-fa2/verify.js --vector tezos-fxhash-gentk-1-pass`. Cross-chain significance: this is the first adapter exercising a chain whose ownership model (FA2 ledger keyed by (address, token_id)) lacks a `ownerOf(token_id)` primitive — the claimed holder MUST be supplied as input and then confirmed against the ledger. See SPEC §5.3."
+    },
+    {
+      "id": "tezos-fxhash-gentk-1-fail-step1-wrong-holder",
+      "adapter": "tezos-fa2",
+      "input": {
+        "chain": "tezos-mainnet",
+        "contract": "KT1KEa8z6vWXDJrVqtMrAeDVzsvxat3kHaCE",
+        "token_id": "1",
+        "holder": "tz1burnburnburnburnburnburnburjAYjjX"
+      },
+      "fixture": "fixtures/tezos-fxhash-gentk-1-fail-step1-wrong-holder",
+      "expected": {
+        "result": "not_conforming",
+        "failed_step": 1
+      },
+      "notes": "Real Tezos burn-address ledger lookup: script_expr_hash(pack(Pair tz1burn..., 1)) = `exprtky4jfp5t4NSVwHZpU9p1qVipJ33YC3d69EfGkXXkcp79dTYVd`; the Tezos RPC returns 404 at /context/big_maps/22785/<hash>, which the adapter treats as balance=0 per SPEC §4 step 1. The burn address does NOT hold fxhash gentk #1; the adapter fails step 1 with `holder_has_balance`. Exercises the new §5.3 claimed-holder confirmation semantics introduced for FA2-style chains."
+    },
+    {
+      "id": "tezos-fxhash-gentk-1-fail-step3-metadata-tampered",
+      "adapter": "tezos-fa2",
+      "input": {
+        "chain": "tezos-mainnet",
+        "contract": "KT1KEa8z6vWXDJrVqtMrAeDVzsvxat3kHaCE",
+        "token_id": "1",
+        "holder": "tz1PoDdN2oyRyF6DA73zTWAWYhNL4UGr3Egj"
+      },
+      "fixture": "fixtures/tezos-fxhash-gentk-1-fail-step3-metadata-tampered",
+      "expected": {
+        "result": "not_conforming",
+        "failed_step": 3
+      },
+      "notes": "Real ledger + token_metadata fixtures (chain reads pass step 1), but the IPFS raw block for the manifest CID `QmagGP...tbY` has had a single 0xFF byte appended. sha256 of the tampered bytes no longer matches the CIDv0 multihash digest; adapter fails step 3 on metadata_cid_hash. Demonstrates that SPEC §4 step 3 catches byte-level substitution equally on Tezos's manifest path as on Flow's and Ethereum's."
     }
   ]
 }
