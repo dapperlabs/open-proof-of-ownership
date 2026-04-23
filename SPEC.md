@@ -1,9 +1,24 @@
-# Open Proof-of-Ownership (OPO) — Specification v0.3
+# Open Proof-of-Ownership (OPO) — Specification v0.4
 
 **Status:** Draft
 **License:** CC0 1.0 Universal (public domain)
 **Editors:** Initial publication, 2026-04
 **Repository:** github.com/dapperlabs/open-proof-of-ownership
+
+## Changes from v0.3
+
+- §4 step 3 admits an OPTIONAL **two-gateway cross-check** for path-resolved
+  retrieval. A verifier MAY query a second independent non-issuer gateway
+  for the same `<dirCID>/<path>` and require that both gateways advertise
+  the same leaf CID (via `x-ipfs-roots` or ETag) before trusting the
+  primary's bytes. Failure of agreement is a step-3 failure.
+- §5 trust assumption v0.3 ("gateway UnixFS traversal correctness") is
+  weakened when cross-check is active: a substitution attack now requires
+  collusion between TWO independent gateways, not one.
+- §8 adapters MAY expose a `crosscheck` option and/or honour a
+  `OPO_IPFS_CROSSCHECK=1` environment signal. When active, adapters MUST
+  use two gateways operated by independent organisations; they MUST NOT
+  satisfy the cross-check by querying two endpoints of the same operator.
 
 ## Changes from v0.2
 
@@ -115,6 +130,20 @@ A verifier MUST, for any token under test:
    confirm equality with the multihash digest of the returned leaf CID
    before treating either as trusted. The adapter MUST report the leaf CID
    as `media_cid` (or `metadata_cid`) — never the declared directory CID.
+
+   **Two-gateway cross-check (OPTIONAL strengthening).** A verifier MAY
+   query a second independent non-issuer gateway for the same
+   `<dirCID>/<path>` and require that both gateways advertise the same
+   leaf CID in their response headers. The two gateways MUST be operated
+   by independent organisations (e.g. `dweb.link` and `ipfs.io`); two
+   endpoints of a single operator do NOT satisfy independence. If the two
+   leaf CIDs disagree, the verifier MUST fail step 3 with a cross-check
+   error. Agreement weakens the v0.3 "single-gateway directory traversal
+   correctness" assumption to "collusion between two independent gateways
+   would be required for substitution to go undetected." The second
+   gateway's bytes need not be hashed; the hash check against the primary
+   gateway's bytes already establishes byte-for-byte integrity against
+   whichever leaf CID the primary advertised.
 4. If `metadata_cid` is present ("pinned-manifest case"): resolve it (by
    direct CID or path resolution per step 3) and retrieve the JSON. If the
    manifest declares `edition_id` or `serial`, those MUST match the
@@ -139,13 +168,22 @@ A verifier under OPO trusts:
   version).
 - That at least one non-issuer IPFS gateway is reachable and honors raw-block
   retrieval.
-- For path-resolved retrieval only: that the gateway performs UnixFS
-  directory traversal correctly (i.e. returns the actual file at `<path>`
-  under `<dirCID>`). A compromised gateway could return a different file's
-  bytes for the path — the verifier would still detect tampering of the
-  returned bytes against the returned leaf CID, but not substitution of
-  one leaf for another under the same path. A stronger verifier MAY
-  cross-check the same path resolution at a second independent gateway.
+- For path-resolved retrieval only, in the single-gateway case: that the
+  gateway performs UnixFS directory traversal correctly (i.e. returns the
+  actual file at `<path>` under `<dirCID>`). A compromised gateway could
+  return a different file's bytes for the path — the verifier would still
+  detect tampering of the returned bytes against the returned leaf CID,
+  but not substitution of one leaf for another under the same path.
+- For path-resolved retrieval with the two-gateway cross-check enabled
+  (§4 step 3): that the two chosen gateways are operated by independent
+  organisations AND are not colluding. Substitution under this mode
+  requires both to advertise the same substituted leaf CID; a single
+  compromised gateway can no longer silently substitute. The verifier
+  is responsible for choosing gateways whose operators have no shared
+  ownership, infrastructure, or anchoring; this repository's reference
+  adapter defaults to `dweb.link` (Protocol Labs) and `ipfs.io`
+  (Interplanetary Shipyard), which are operated by distinct entities as
+  of 2026-04.
 
 A verifier under OPO does NOT trust:
 
@@ -199,6 +237,17 @@ Adapters implementing path-resolved retrieval (§4 step 3) MUST:
   digest before using either.
 - Report the leaf CID — not the declared directory CID — as the
   `metadata_cid` / `media_cid` field in the result envelope.
+
+Adapters MAY expose a cross-check option (§4 step 3 OPTIONAL
+strengthening) activated by a call-site flag or the environment variable
+`OPO_IPFS_CROSSCHECK=1`. When active, the adapter MUST:
+
+- Query a second gateway operated by an organisation independent of the
+  primary.
+- Fail with a step-3 cross-check error when the two gateways advertise
+  different leaf CIDs for the same `<dirCID>/<path>`.
+- Include both leaf CIDs and the agreement outcome in the step-3 record
+  of the result envelope.
 
 This repository provides reference adapters for:
 

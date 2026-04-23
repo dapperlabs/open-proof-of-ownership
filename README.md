@@ -10,13 +10,14 @@ consensus and the CID hash function.
 
 ## Status
 
-- `SPEC.md` — v0.3 draft. CC0. Changelog at the top of the file.
+- `SPEC.md` — v0.4 draft. CC0. Changelog at the top of the file.
 - `/conformance/` — JSON test vectors + recorded mainnet fixtures. CC0.
 - `/adapters/flow-topshot/` — reference adapter, MIT. All three Flow vectors
   round-trip offline against fixtures and live against Flow mainnet + dweb.link.
-- `/adapters/erc721-generic/` — reference adapter, MIT. Both ERC-721 vectors
-  (Azuki #9999 pass + image-tampered fail) round-trip offline and live against
-  Ethereum mainnet + dweb.link.
+- `/adapters/erc721-generic/` — reference adapter, MIT. Four ERC-721 vectors
+  (Azuki #9999 pass + image-tampered fail + two-gateway cross-check pass +
+  cross-check mismatch fail) round-trip offline; live mode verifies against
+  Ethereum mainnet + dweb.link + ipfs.io.
 - Live Example 1: [topshot-auth-portal.vercel.app](https://topshot-auth-portal.vercel.app)
   — verifies `A.0b2a3299cc857e29.TopShot` on Flow mainnet under this spec.
 
@@ -45,13 +46,18 @@ node adapters/flow-topshot/verify.js \
 node adapters/erc721-generic/verify.js \
   --contract 0xED5AF388653567Af2F388E6224dC7C4b3241C544 \
   --token-id 9999
+
+# Same Azuki token with the two-gateway cross-check active (dweb.link + ipfs.io)
+OPO_IPFS_CROSSCHECK=1 node adapters/erc721-generic/verify.js \
+  --contract 0xED5AF388653567Af2F388E6224dC7C4b3241C544 \
+  --token-id 9999
 ```
 
 Both adapters print the same five-step result envelope:
 
 ```json
 {
-  "spec_version": "0.3",
+  "spec_version": "0.4",
   "result": "conforming",
   "fields": { "chain": "...", "holder": "...", "media_cid": "...", "metadata_cid": "...", ... },
   "steps": [
@@ -89,10 +95,12 @@ PASS: flow-topshot-pass-1
 PASS: flow-topshot-fail-step2-serial-out-of-range
 PASS: flow-topshot-fail-step3-cid-tampered
 
-harness=OFFLINE  adapter=erc721-generic  vectors=2
+harness=OFFLINE  adapter=erc721-generic  vectors=4
 
 PASS: erc721-azuki-9999-pass
 PASS: erc721-azuki-9999-fail-step3-image-tampered
+PASS: erc721-azuki-9999-pass-crosscheck
+PASS: erc721-azuki-9999-fail-crosscheck-mismatch
 ```
 
 ## Repository layout

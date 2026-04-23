@@ -12,7 +12,8 @@
 // Fixture directory layout (union over current adapters):
 //   flow-script-response.txt      -- base64-JSON-CDC envelope (flow-topshot)
 //   rpc-<selector>.hex            -- eth_call result hex (erc721-generic)
-//   path-map.json                 -- { "<cid>/<path>": "<leafCid>" }
+//   path-map.json                 -- { "<cid>/<path>": "<leafCid>" } (primary gateway)
+//   path-map-2.json               -- { "<cid>/<path>": "<leafCid>" } (second gateway, optional)
 //   ipfs-<cid>.raw                -- raw IPLD block bytes
 
 const fs = require("fs");
@@ -48,6 +49,15 @@ function fixtureTransport(fixtureDir) {
       if (!leafCid) throw new Error(`no fixture path mapping for ${key}`);
       const bytes = fs.readFileSync(path.join(fixtureDir, `ipfs-${leafCid}.raw`));
       return { leafCid, bytes };
+    },
+    async resolveIpfsPath2(dirCid, subpath) {
+      const mapPath = path.join(fixtureDir, "path-map-2.json");
+      if (!fs.existsSync(mapPath)) throw new Error(`path-map-2.json missing in ${fixtureDir}`);
+      const map = JSON.parse(fs.readFileSync(mapPath, "utf8"));
+      const key = `${dirCid}/${subpath}`;
+      const leafCid = map[key];
+      if (!leafCid) throw new Error(`no fixture path-map-2 mapping for ${key}`);
+      return { leafCid };
     },
     // both
     async getIpfsRaw(cid) {
@@ -99,6 +109,7 @@ async function main() {
     const opts = hasFixture && !live
       ? { transport: fixtureTransport(path.join(__dirname, v.fixture)) }
       : {};
+    if (v.opts) Object.assign(opts, v.opts);
 
     let envelope;
     try {

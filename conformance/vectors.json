@@ -1,5 +1,5 @@
 {
-  "spec_version": "0.3",
+  "spec_version": "0.4",
   "vectors": [
     {
       "id": "flow-topshot-pass-1",
@@ -94,6 +94,43 @@
         "failed_step": 3
       },
       "notes": "Real RPC + metadata fixture for Azuki #9999 with a single 0xFF byte appended to the image root block `QmfQbR…6Kr`. sha256 no longer matches the declared multihash digest — exercises SPEC §4 step 3 for a path-resolved media leaf."
+    },
+    {
+      "id": "erc721-azuki-9999-pass-crosscheck",
+      "adapter": "erc721-generic",
+      "input": {
+        "chain": "ethereum-mainnet",
+        "contract": "0xED5AF388653567Af2F388E6224dC7C4b3241C544",
+        "token_id": "9999"
+      },
+      "opts": { "crosscheck": true },
+      "fixture": "fixtures/erc721-azuki-9999-pass-crosscheck",
+      "expected": {
+        "result": "conforming",
+        "failed_step": null,
+        "fields_present": ["media_cid", "metadata_cid"],
+        "field_values": {
+          "metadata_cid": "Qme4i1jbJvY8mfDWfFXLKh1ZLy1WtKh4edHXdFWfA61Fps",
+          "media_cid": "QmfQbRhnw6jLPyqf9zDmT6nMbAwZzfHh26XKdKN3cka6Kr"
+        }
+      },
+      "notes": "Two-of-two gateway agreement. Primary gateway dweb.link and independent gateway ipfs.io both return the same leaf CIDs for Azuki #9999's metadata and image paths. x-ipfs-roots headers captured live on 2026-04-23: `QmZcH4YvBVVRJtdn4RdbaqgspFU8gH6P9vomDpBVpAL3u4,Qme4i1jbJvY8mfDWfFXLKh1ZLy1WtKh4edHXdFWfA61Fps` and `QmYDvPAXtiJg7s8JdRBSLWdgSphQdac8j1YuQNNxcGE1hg,QmfQbRhnw6jLPyqf9zDmT6nMbAwZzfHh26XKdKN3cka6Kr`. Exercises SPEC v0.4 §5 trust-assumption strengthening."
+    },
+    {
+      "id": "erc721-azuki-9999-fail-crosscheck-mismatch",
+      "adapter": "erc721-generic",
+      "input": {
+        "chain": "ethereum-mainnet",
+        "contract": "0xED5AF388653567Af2F388E6224dC7C4b3241C544",
+        "token_id": "9999"
+      },
+      "opts": { "crosscheck": true },
+      "fixture": "fixtures/erc721-azuki-9999-fail-crosscheck-mismatch",
+      "expected": {
+        "result": "not_conforming",
+        "failed_step": 3
+      },
+      "notes": "Synthetic fixture where the second gateway returns a different leaf CID for the tokenURI directory path. Models a substitution attack scenario: a compromised primary gateway returns bytes that hash to a substituted leaf CID; the independent second gateway's path resolution disagrees, and the verifier fails step 3 on `crosscheck mismatch`. Exercises SPEC v0.4 §4 step 3 crosscheck branch."
     }
   ]
 }

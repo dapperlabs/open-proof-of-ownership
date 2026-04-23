@@ -79,7 +79,7 @@ so step 4 reduces to an internal consistency check. The adapter emits
 
 ```json
 {
-  "spec_version": "0.2",
+  "spec_version": "0.4",
   "result": "conforming",
   "fields": {
     "chain": "flow-mainnet",

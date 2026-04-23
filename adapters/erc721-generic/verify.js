@@ -32,12 +32,18 @@ const SELECTOR_TOTAL_SUPPLY = "0x18160ddd"; // totalSupply()
 
 const DEFAULT_RPC = process.env.OPO_ETH_RPC || "https://ethereum-rpc.publicnode.com";
 const DEFAULT_IPFS_GW = process.env.OPO_IPFS_GW || "https://dweb.link/ipfs/";
+const DEFAULT_IPFS_GW_2 = process.env.OPO_IPFS_GW_2 || "https://ipfs.io/ipfs/";
 
 // --- transport -------------------------------------------------------------
 // The live transport invokes fetch; the conformance harness injects a
 // fixture-backed transport with the same contract. Any adapter-internal
 // network call MUST go through this object (SPEC §8).
-function makeTransport({ fetchImpl = fetch, rpc = DEFAULT_RPC, ipfsGw = DEFAULT_IPFS_GW } = {}) {
+function makeTransport({
+  fetchImpl = fetch,
+  rpc = DEFAULT_RPC,
+  ipfsGw = DEFAULT_IPFS_GW,
+  ipfsGw2 = DEFAULT_IPFS_GW_2,
+} = {}) {
   return {
     async rpcCall(to, data) {
       const res = await fetchImpl(rpc, {
@@ -51,10 +57,10 @@ function makeTransport({ fetchImpl = fetch, rpc = DEFAULT_RPC, ipfsGw = DEFAULT_
       if (j.error) throw new Error(`rpc: ${j.error.message}`);
       return j.result;
     },
-    // Path resolution at the gateway. Returns the leaf CID (from the
-    // Etag or x-ipfs-roots response header) and the raw block bytes. The
-    // caller MUST verify sha256(bytes) matches the leaf CID's multihash
-    // before trusting either value.
+    // Path resolution at the primary gateway. Returns the leaf CID (from
+    // `x-ipfs-roots` or an ETag of the form `"<cid>.raw"`) and the raw
+    // block bytes. The caller MUST verify sha256(bytes) matches the leaf
+    // CID's multihash before trusting either value.
     async resolveIpfsPath(dirCid, path) {
       const url = `${ipfsGw}${dirCid}/${path}?format=raw`;
       const res = await fetchImpl(url, {
@@ -65,6 +71,23 @@ function makeTransport({ fetchImpl = fetch, rpc = DEFAULT_RPC, ipfsGw = DEFAULT_
       const leafCid = parseLeafCidFromHeaders(res.headers);
       const bytes = Buffer.from(await res.arrayBuffer());
       return { leafCid, bytes };
+    },
+    // Path resolution at an INDEPENDENT second gateway (SPEC §5). Returns
+    // only the leaf CID advertised by the second gateway's headers; the
+    // bytes are not read because the hash check is performed against the
+    // primary gateway's response. The purpose is to confirm that two
+    // independent gateways agree on the path-to-leaf mapping under the
+    // directory CID — a substitution attack by a single gateway would
+    // require collusion with the second to go undetected.
+    async resolveIpfsPath2(dirCid, path) {
+      const url = `${ipfsGw2}${dirCid}/${path}?format=raw`;
+      const res = await fetchImpl(url, {
+        headers: { "accept": "application/vnd.ipld.raw" },
+        redirect: "follow",
+      });
+      if (!res.ok) throw new Error(`ipfs2 ${res.status} for ${dirCid}/${path}`);
+      const leafCid = parseLeafCidFromHeaders(res.headers);
+      return { leafCid };
     },
     async getIpfsRaw(cid) {
       const url = `${ipfsGw}${cid}?format=raw`;
@@ -293,15 +316,26 @@ async function readChainFields(input, transport) {
 
 // Resolve an ipfs:// reference to a leaf CID + bytes, verifying sha256.
 // SPEC §4 step 3 requires raw-block retrieval so bytes hash to the CID.
-async function resolveAndVerify(ref, transport) {
-  let leafCid, bytes;
+// When `crosscheck` is true and the reference is a directory path, a
+// second independent gateway is queried; the two leaf CIDs MUST agree
+// (SPEC §5 strengthening). Direct-CID references are unaffected by
+// crosscheck — the bytes-to-CID hash check is already gateway-agnostic.
+async function resolveAndVerify(ref, transport, opts = {}) {
+  let leafCid, bytes, crosscheck = null;
   if (ref.path) {
-    // Directory reference (ipfs://CID/path). The gateway performs the
-    // HAMT/flat-directory traversal and returns the leaf's raw block.
+    // Directory reference (ipfs://CID/path). The primary gateway performs
+    // the HAMT/flat-directory traversal and returns the leaf's raw block.
     // The verifier then hashes the bytes against the leaf CID -- if they
     // match, the gateway's path->CID mapping is confirmed trustless for
     // this retrieval.
     ({ leafCid, bytes } = await transport.resolveIpfsPath(ref.cid, ref.path));
+    if (opts.crosscheck && typeof transport.resolveIpfsPath2 === "function") {
+      const alt = await transport.resolveIpfsPath2(ref.cid, ref.path);
+      crosscheck = { gateway1_cid: leafCid, gateway2_cid: alt.leafCid, agree: alt.leafCid === leafCid };
+      if (!crosscheck.agree) {
+        throw new Error(`crosscheck mismatch: ${leafCid} != ${alt.leafCid}`);
+      }
+    }
   } else {
     leafCid = ref.cid;
     bytes = await transport.getIpfsRaw(leafCid);
@@ -309,7 +343,7 @@ async function resolveAndVerify(ref, transport) {
   if (!verifyCidSha256(leafCid, bytes)) {
     throw new Error(`sha256 mismatch for ${leafCid}`);
   }
-  return { leafCid, bytes };
+  return { leafCid, bytes, crosscheck };
 }
 
 function extractJson(dagPbBytes) {
@@ -324,6 +358,7 @@ function extractJson(dagPbBytes) {
 
 async function verify(input, opts = {}) {
   const transport = opts.transport || makeTransport();
+  const crosscheck = opts.crosscheck ?? (process.env.OPO_IPFS_CROSSCHECK === "1");
   const steps = [];
   let fields = {};
 
@@ -351,11 +386,12 @@ async function verify(input, opts = {}) {
   steps.push({ step: 2, name: "serial_in_range", ok: true });
 
   // --- step 3 (metadata leaf hash) ----------------------------------------
-  let metaBytes;
+  let metaBytes, metaCrosscheck = null;
   try {
-    const { leafCid, bytes } = await resolveAndVerify(tokenUriRef, transport);
-    fields.metadata_cid = leafCid;
-    metaBytes = bytes;
+    const r = await resolveAndVerify(tokenUriRef, transport, { crosscheck });
+    fields.metadata_cid = r.leafCid;
+    metaBytes = r.bytes;
+    metaCrosscheck = r.crosscheck;
   } catch (e) {
     return envelope(fields, [...steps, { step: 3, name: "metadata_cid_hash", ok: false, error: e.message }], 3);
   }
@@ -374,13 +410,15 @@ async function verify(input, opts = {}) {
   }
 
   // --- step 3 (media leaf/root hash) --------------------------------------
+  let mediaCrosscheck = null;
   try {
-    const { leafCid } = await resolveAndVerify(imageRef, transport);
-    fields.media_cid = leafCid;
+    const r = await resolveAndVerify(imageRef, transport, { crosscheck });
+    fields.media_cid = r.leafCid;
+    mediaCrosscheck = r.crosscheck;
   } catch (e) {
     return envelope(fields, [...steps, { step: 3, name: "media_cid_hash", ok: false, error: e.message }], 3);
   }
-  steps.push({ step: 3, name: "media_cid_hash", ok: true });
+  steps.push({ step: 3, name: "media_cid_hash", ok: true, crosscheck: { metadata: metaCrosscheck, media: mediaCrosscheck } });
 
   // --- step 4 (metadata_cid present; consistency) -------------------------
   // The manifest was retrieved via a chain-pinned directory reference, so
@@ -402,7 +440,7 @@ async function verify(input, opts = {}) {
 
 function envelope(fields, steps, failed_step) {
   return {
-    spec_version: "0.3",
+    spec_version: "0.4",
     result: failed_step === null ? "conforming" : "not_conforming",
     fields,
     steps,

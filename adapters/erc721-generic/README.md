@@ -35,8 +35,19 @@ that case (SPEC §4 step 3):
 
 This preserves content-addressed integrity (any byte tamper fails step 3)
 while adding one documented trust assumption: the gateway performs UnixFS
-directory traversal correctly. A stronger verifier MAY re-resolve the same
-path at an independent gateway and require the same leaf CID.
+directory traversal correctly.
+
+### Two-gateway cross-check (OPTIONAL, SPEC v0.4 §4 step 3)
+
+Set `OPO_IPFS_CROSSCHECK=1` (or pass `crosscheck: true` in `verify()`
+opts) to require that an independent second gateway advertises the same
+leaf CID for the same `<dirCID>/<path>`. The default second gateway is
+`https://ipfs.io/ipfs/` (Interplanetary Shipyard), independent of the
+default primary `https://dweb.link/ipfs/` (Protocol Labs). Override via
+`OPO_IPFS_GW_2`. A disagreement between the two gateways fails step 3
+with a `crosscheck mismatch` error. Agreement weakens the single-gateway
+traversal-correctness assumption to a collusion-between-two-operators
+assumption.
 
 ## Non-conforming cases
 
@@ -58,7 +69,9 @@ hold — the adapter surfaces the failed step rather than synthesize a value:
 - IPFS gateway reachability for `OPO_IPFS_GW` (default `dweb.link`). The
   gateway's UnixFS path resolution is trusted only to the extent described
   in SPEC §5 — any byte tamper is still detected against the returned
-  leaf CID.
+  leaf CID. When `OPO_IPFS_CROSSCHECK=1` is set, a second gateway
+  (`OPO_IPFS_GW_2`, default `ipfs.io`) is consulted and the two leaf
+  CIDs MUST agree.
 
 ## Live invocation
 
@@ -83,3 +96,14 @@ Override RPC and gateway with `OPO_ETH_RPC` and `OPO_IPFS_GW`.
 - `conformance/fixtures/erc721-azuki-9999-fail-step3/` — same fixture with
   one trailing `0xFF` byte appended to the image root block, synthesizing a
   step-3 failure.
+- `conformance/fixtures/erc721-azuki-9999-pass-crosscheck/` — pass fixture
+  extended with `path-map-2.json` capturing the independent ipfs.io gateway's
+  `x-ipfs-roots` response for the same two directory paths (probed live
+  2026-04-23). Both gateways advertise identical leaf CIDs; the cross-check
+  passes.
+- `conformance/fixtures/erc721-azuki-9999-fail-crosscheck-mismatch/` —
+  pass fixture extended with a synthetic `path-map-2.json` where the
+  second gateway returns a different leaf CID for the tokenURI directory
+  path. Models a substitution attack where a compromised primary gateway
+  substitutes a different leaf CID; the independent second gateway
+  disagrees, and the verifier fails step 3 with `crosscheck mismatch`.
