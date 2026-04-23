@@ -10,7 +10,7 @@ consensus and the CID hash function.
 
 ## Status
 
-- `SPEC.md` — v0.6 draft. CC0. Changelog at the top of the file.
+- `SPEC.md` — v0.7 draft. CC0. Changelog at the top of the file.
 - `/conformance/` — JSON test vectors + recorded mainnet fixtures. CC0.
 - `/adapters/flow-topshot/` — reference adapter, MIT. All three Flow vectors
   round-trip offline against fixtures and live against Flow mainnet + dweb.link.
@@ -36,6 +36,21 @@ consensus and the CID hash function.
   to compute `script_expr_hash` without trusting any indexer for the
   key-hash binding. Three chain families (Flow, EVM, Tezos) together
   satisfy SPEC §7.2 cross-chain coverage on all three model axes.
+- `/adapters/solana-metaplex/` — reference adapter, MIT. Three Solana
+  vectors on the Okay Bears collection-parent NFT
+  (`3saAedkM9o5g1u5DCqsuMZuC4GRqPB4TuMkvSsSVvGQ3`) against public
+  Solana RPC (`solana-rpc.publicnode.com`) + Arweave
+  (`arweave.net/raw` + `arweave.net/graphql`). Exercises the SPEC
+  §4.3b **transaction-committed** retrieval branch introduced in
+  v0.7: the on-chain commitment is an Arweave tx-id (not a
+  content hash of served bytes), so step 3 performs a TWO-SURFACE
+  cross-check of `data.size` and `Content-Type` between the raw-byte
+  CDN and the GraphQL envelope index. This is weaker than the
+  sha2-256 CID check of §4.3a and is documented explicitly in SPEC
+  §5.4 and in the adapter's README. Adding this fourth chain family
+  satisfies SPEC §7.3 cross-chain media-layer coverage on two
+  distinct `commitment_type` primitives (`ipfs-cid-sha256` +
+  `arweave-tx-id`).
 - Live Example 1: [topshot-auth-portal.vercel.app](https://topshot-auth-portal.vercel.app)
   — verifies `A.0b2a3299cc857e29.TopShot` on Flow mainnet under this spec.
 
@@ -80,19 +95,34 @@ node adapters/tezos-fa2/verify.js \
   --contract KT1KEa8z6vWXDJrVqtMrAeDVzsvxat3kHaCE \
   --token-id 1 \
   --holder tz1PoDdN2oyRyF6DA73zTWAWYhNL4UGr3Egj
+
+# Verify one live Solana/Metaplex/Arweave NFT against Solana mainnet + Arweave
+node adapters/solana-metaplex/verify.js \
+  --contract 3saAedkM9o5g1u5DCqsuMZuC4GRqPB4TuMkvSsSVvGQ3 \
+  --holder   4s1BwwyHVnRi9aJaHGKRN15hjKRLCDVkYcDYtAKX4EEs
 ```
 
-All three adapters print the same step-envelope shape:
+All four adapters print the same step-envelope shape (the
+IPFS-family adapters set `commitment_type = "ipfs-cid-sha256"` and
+populate both `media_cid` / `metadata_cid` and `media_commitment` /
+`metadata_commitment`; the Solana adapter sets `commitment_type =
+"arweave-tx-id"` and populates only the typed `_commitment` fields):
 
 ```json
 {
-  "spec_version": "0.6",
+  "spec_version": "0.7",
   "result": "conforming",
-  "fields": { "chain": "...", "holder": "...", "media_cid": "...", "metadata_cid": "...", ... },
+  "fields": {
+    "chain": "...", "holder": "...",
+    "commitment_type": "ipfs-cid-sha256" | "arweave-tx-id",
+    "media_commitment": "...", "metadata_commitment": "...",
+    "media_cid": "...", "metadata_cid": "...",
+    ...
+  },
   "steps": [
     {"step": 1, "name": "read_chain_fields", "ok": true},
     {"step": 2, "name": "serial_in_range",  "ok": true},
-    {"step": 3, "name": "media_cid_hash",   "ok": true},
+    {"step": 3, "name": "media_integrity",  "ok": true},
     {"step": 4, "name": "metadata_consistent", "ok": true}
   ],
   "failed_step": null
@@ -110,11 +140,13 @@ An implementation is **conforming** if it produces the expected
 node conformance/run.js adapters/flow-topshot/verify.js
 node conformance/run.js adapters/erc721-generic/verify.js
 node conformance/run.js adapters/tezos-fa2/verify.js
+node conformance/run.js adapters/solana-metaplex/verify.js
 
-# Live — replay each vector against the live chain + a public IPFS gateway.
+# Live — replay each vector against the live chain + a public gateway.
 OPO_LIVE=1 node conformance/run.js adapters/flow-topshot/verify.js
 OPO_LIVE=1 node conformance/run.js adapters/erc721-generic/verify.js
 OPO_LIVE=1 node conformance/run.js adapters/tezos-fa2/verify.js
+OPO_LIVE=1 node conformance/run.js adapters/solana-metaplex/verify.js
 ```
 
 Expected offline output:
@@ -141,6 +173,12 @@ harness=OFFLINE  adapter=tezos-fa2  vectors=3
 PASS: tezos-fxhash-gentk-1-pass
 PASS: tezos-fxhash-gentk-1-fail-step1-wrong-holder
 PASS: tezos-fxhash-gentk-1-fail-step3-metadata-tampered
+
+harness=OFFLINE  adapter=solana-metaplex  vectors=3
+
+PASS: solana-okaybears-collection-pass
+PASS: solana-okaybears-collection-fail-step1-wrong-holder
+PASS: solana-okaybears-collection-fail-step3-image-tampered
 ```
 
 ## Repository layout
@@ -156,6 +194,8 @@ adapters/
   flow-topshot/              ← Flow + Cadence reference adapter
   erc721-generic/            ← EVM + ERC-721 reference adapter
   tezos-fa2/                 ← Tezos + FA2 (single-edition) reference adapter
+  solana-metaplex/           ← Solana + SPL Token + Metaplex Token Metadata v1
+                               + Arweave media (commitment_type = "arweave-tx-id")
 examples/
   example-1-topshot.md       ← walks through one verified Top Shot Moment
 ```

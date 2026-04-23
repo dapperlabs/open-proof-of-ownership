@@ -1,9 +1,54 @@
-# Open Proof-of-Ownership (OPO) — Specification v0.6
+# Open Proof-of-Ownership (OPO) — Specification v0.7
 
 **Status:** Draft
 **License:** CC0 1.0 Universal (public domain)
 **Editors:** Initial publication, 2026-04
 **Repository:** github.com/dapperlabs/open-proof-of-ownership
+
+## Changes from v0.6
+
+- §3 introduces a `commitment_type` field on the result envelope and
+  admits polymorphic media/metadata commitment identifiers. Two
+  values are defined in v0.7: `ipfs-cid-sha256` (the v0.1–v0.6 case:
+  identifier is an IPFS CID whose multihash is sha2-256) and
+  `arweave-tx-id` (new in v0.7: identifier is an Arweave transaction
+  id, 43-char base64url). New typed fields `media_commitment` and
+  `metadata_commitment` are introduced on the result envelope. The
+  existing field names `media_cid` / `metadata_cid` are retained as
+  **backward-compatibility aliases** for the `ipfs-cid-sha256` case
+  only, so existing adapters and conformance vectors continue to
+  work unchanged. Adapters under non-IPFS commitment types MUST
+  populate `media_commitment` / `metadata_commitment` (and MAY
+  populate the `_cid` aliases only when the identifier also parses
+  as a CID, which it generally will not).
+- §4 step 3 splits along `commitment_type` into **content-addressed**
+  retrieval (§4.3a — equivalent to v0.6 step 3, locally verifies
+  sha2-256 of bytes against the CID multihash) and **transaction-
+  committed** retrieval (§4.3b — fetches bytes from a gateway and
+  cross-checks `data.size` and `tags[Content-Type]` against an
+  independent envelope-indexing surface). The two branches provide
+  measurably different integrity guarantees; see §5.4.
+- §5.4 adds a new trust assumption applicable to transaction-committed
+  storage: substitution detection requires **both** the raw-byte
+  gateway AND the envelope-indexing surface (e.g. Arweave GraphQL)
+  to agree on the substituted bytes. A single compromised surface
+  cannot silently substitute — the size check alone catches
+  append/truncate attacks — but the bytes are not themselves hashed
+  into the on-chain commitment under this branch, so byte-identical
+  substitutions that preserve size AND content-type evade detection.
+  §5.4 is strictly weaker than §5.1 (content-addressed) and
+  adapters operating under the §4.3b branch MUST document this in
+  their README.
+- §7.3 adds a **cross-chain media-layer coverage requirement**: the
+  reference set MUST collectively exercise AT LEAST TWO
+  media-integrity primitives, differentiated by the
+  `commitment_type` axis. The v0.7 reference set (Flow/ERC-721/Tezos
+  under `ipfs-cid-sha256`, plus Solana/Metaplex under
+  `arweave-tx-id`) satisfies this.
+- §8.3 documents the Solana/Metaplex/Arweave reference adapter: the
+  Metaplex Token Metadata v1 PDA derivation, the SPL Token +
+  token-account-owner holder-lookup (discovered-holder branch), and
+  the Arweave size+Content-Type cross-check pattern.
 
 ## Changes from v0.5
 
@@ -125,9 +170,17 @@ document are to be interpreted as described in BCP 14 (RFC 2119, RFC 8174).
   explicit codec and multihash) are in scope.
 - **Holder**: the account currently controlling the token per chain consensus.
 - **Verifier**: an independent process executing this specification.
-- **Chain-pinned manifest**: a document whose CID — or a directory reference
-  resolvable to a unique file CID — is stored on-chain under a known binding
-  and whose JSON contains OPO-shaped fields.
+- **Chain-pinned manifest**: a document whose commitment identifier
+  (CID for IPFS, transaction id for Arweave, or any future
+  commitment type admitted under §3) — or a directory reference
+  resolvable to a unique file-level identifier — is stored on-chain
+  under a known binding and whose JSON contains OPO-shaped fields.
+- **Commitment identifier**: an opaque string that binds a
+  retrievable byte stream to an on-chain commitment, under the
+  scheme named by `commitment_type`. For `ipfs-cid-sha256` it is a
+  CID whose multihash is sha2-256; for `arweave-tx-id` it is a
+  43-character base64url Arweave transaction id; extensions are
+  permitted and MUST be listed in §8.
 - **Directory reference**: an `ipfs://<dirCID>/<path>` URI whose leaf
   resolution is deterministic given the directory's UnixFS structure.
 
@@ -145,18 +198,44 @@ from public chain-state OR public content-addressed retrieval:
 | `serial` | REQUIRED | integer | chain |
 | `edition_size` | REQUIRED | integer | chain |
 | `holder` | REQUIRED | string | chain |
-| `media_cid` | REQUIRED | string (CID, sha2-256 multihash) | chain or chain-pinned manifest |
-| `metadata_cid` | OPTIONAL | string (CID, sha2-256 multihash) | chain or chain-pinned manifest |
+| `commitment_type` | REQUIRED | string (enum, see below) | adapter declaration |
+| `media_commitment` | REQUIRED | string (commitment identifier per §2) | chain or chain-pinned manifest |
+| `metadata_commitment` | OPTIONAL | string (commitment identifier per §2) | chain or chain-pinned manifest |
+| `media_cid` | OPTIONAL (alias) | string (CID, sha2-256 multihash) | chain or chain-pinned manifest |
+| `metadata_cid` | OPTIONAL (alias) | string (CID, sha2-256 multihash) | chain or chain-pinned manifest |
+
+`commitment_type` is one of the enumerated values:
+
+- `ipfs-cid-sha256` — the identifier is an IPFS CID (v0 or v1) whose
+  multihash function is sha2-256. This is the v0.1–v0.6 default and
+  applies to the reference Flow, ERC-721, and Tezos FA2 adapters.
+- `arweave-tx-id` — the identifier is a 43-character base64url Arweave
+  transaction id. Applies to the reference Solana/Metaplex adapter.
+- Future values MUST be declared normatively in a new §8 adapter
+  subsection and MUST define the step-3 retrieval-and-integrity
+  procedure under §4.3.
+
+**Backward-compatibility aliases.** The names `media_cid` and
+`metadata_cid` are retained as aliases for `media_commitment` /
+`metadata_commitment` **only** when `commitment_type ==
+"ipfs-cid-sha256"`. Adapters under that type MUST populate both the
+aliased and typed field names identically. Adapters under any other
+`commitment_type` MUST populate only `media_commitment` /
+`metadata_commitment` and MUST NOT populate `media_cid` /
+`metadata_cid`. Consumers written against the v0.6 shape therefore
+continue to work against IPFS-family adapters unchanged, and MUST
+switch to the typed field names to consume any non-IPFS adapter.
 
 A field is "from chain" if its value is derivable from a stateless read of a
 public RPC endpoint or block explorer for the named contract.
 
-A field is "from chain-pinned manifest" if it appears in a document whose CID
-— or a directory reference resolvable to a unique file CID under that
-directory — is itself stored on-chain under a binding the adapter declares.
+A field is "from chain-pinned manifest" if it appears in a document whose
+commitment identifier — or a directory reference resolvable to a unique
+file-level identifier under that directory — is itself stored on-chain
+under a binding the adapter declares.
 
-If `metadata_cid` is absent, all chain-sourced fields MUST be internally
-consistent (see §4, step 4).
+If `metadata_commitment` (or its `metadata_cid` alias) is absent, all
+chain-sourced fields MUST be internally consistent (see §4, step 4).
 
 ## 4. Verification Procedure
 
@@ -187,12 +266,20 @@ A verifier MUST, for any token under test:
    MUST declare this in their README so downstream consumers
    understand the narrower claim.
 2. Assert `1 <= serial <= edition_size`. Failure: report step 2.
-3. Retrieve the encoded block identified by `media_cid` from at least one
-   IPFS gateway NOT operated by the issuer. The sha2-256 of the retrieved
-   bytes MUST equal the multihash digest decoded from `media_cid`. Failure:
-   report step 3. Gateways MUST be invoked in raw-block mode (e.g. the
-   `?format=raw` query or `Accept: application/vnd.ipld.raw` header); a
-   UnixFS-decoded response will not hash to the CID of a wrapped file.
+3. Retrieve the bytes committed to by `media_commitment` and confirm
+   integrity against that commitment. The procedure branches on
+   `commitment_type`:
+
+   ### 4.3a Content-addressed retrieval (`commitment_type = "ipfs-cid-sha256"`)
+
+   Retrieve the encoded block identified by `media_commitment` (i.e.
+   `media_cid` under this commitment type) from at least one IPFS
+   gateway NOT operated by the issuer. The sha2-256 of the retrieved
+   bytes MUST equal the multihash digest decoded from the CID.
+   Failure: report step 3. Gateways MUST be invoked in raw-block mode
+   (e.g. the `?format=raw` query or `Accept: application/vnd.ipld.raw`
+   header); a UnixFS-decoded response will not hash to the CID of a
+   wrapped file.
 
    **Path-resolved retrieval.** When the chain-declared reference is a
    directory reference `ipfs://<dirCID>/<path>` rather than a direct CID,
@@ -202,7 +289,8 @@ A verifier MUST, for any token under test:
    bytes of that leaf. The verifier MUST compute sha2-256 of the bytes and
    confirm equality with the multihash digest of the returned leaf CID
    before treating either as trusted. The adapter MUST report the leaf CID
-   as `media_cid` (or `metadata_cid`) — never the declared directory CID.
+   as `media_commitment` (`media_cid` under this commitment type) — never
+   the declared directory CID.
 
    **Two-gateway cross-check (OPTIONAL strengthening).** A verifier MAY
    query a second independent non-issuer gateway for the same
@@ -222,18 +310,56 @@ A verifier MUST, for any token under test:
    gateway's bytes need not be hashed; the hash check against the primary
    gateway's bytes already establishes byte-for-byte integrity against
    whichever leaf CID the primary advertised.
-4. If `metadata_cid` is present ("pinned-manifest case"): resolve it (by
-   direct CID or path resolution per step 3) and retrieve the JSON. If the
-   manifest declares `edition_id` or `serial`, those MUST match the
-   chain-sourced values. If the manifest declares an `image` (or
-   `image_url`) reference, its resolved leaf CID MUST equal `media_cid`.
-   Failure: report step 4.
 
-   If `metadata_cid` is absent ("chain-as-manifest case"): step 4 is
-   satisfied iff `edition_id`, `serial`, `edition_size`, and `media_cid`
-   were all read from chain in step 1 AND steps 2–3 passed. The
-   chain-state itself is the manifest; no off-chain JSON can disagree
-   with it, so no additional check applies.
+   ### 4.3b Transaction-committed retrieval (`commitment_type = "arweave-tx-id"`)
+
+   The commitment identifier is an Arweave transaction id. The integrity
+   guarantee is fundamentally weaker than §4.3a because a tx-id is the
+   hash of an RSA-PSS signature over a transaction envelope whose
+   `data_root` is a merkle root over the data chunks — reconstructing
+   the tx-id from bytes alone requires both `data_root` and the Arweave
+   chunk-merkle tree, neither of which is uniformly exposed via public
+   HTTP gateway CDNs as of 2026-04. See §5.4 for the associated trust
+   assumption.
+
+   The verifier MUST therefore perform a TWO-SURFACE CROSS-CHECK:
+
+   (i) **Bytes surface.** Fetch the raw bytes from a non-issuer Arweave
+   gateway at `/raw/<tx_id>` (or equivalent).
+
+   (ii) **Envelope surface.** Query a structurally independent Arweave
+   envelope index (e.g. the `/graphql` endpoint on the same or
+   different gateway) for the same `tx_id`, retrieving at minimum the
+   `data.size` and `tags[Content-Type]` fields.
+
+   (iii) Assert `bytes.length === envelope.data.size` AND the envelope's
+   `Content-Type` is appropriate for the role (`application/json` for a
+   metadata manifest; `image/*` or another explicit media MIME for a
+   media file). Any mismatch fails step 3.
+
+   The adapter MUST report `media_commitment` as the tx-id used for the
+   bytes fetch, and MUST surface the verified `data.size` and
+   `Content-Type` in the step-3 record of the result envelope for
+   auditability. The adapter MUST NOT populate `media_cid` under this
+   commitment type.
+
+   Adapters under §4.3b MAY upgrade to full `data_root` reconstruction
+   (bringing the integrity guarantee to parity with §4.3a) without
+   changing the external result envelope shape.
+4. If `metadata_commitment` is present ("pinned-manifest case"):
+   resolve it (per §4.3a if `commitment_type = "ipfs-cid-sha256"` or
+   §4.3b if `commitment_type = "arweave-tx-id"`) and retrieve the JSON.
+   If the manifest declares `edition_id` or `serial`, those MUST match
+   the chain-sourced values. If the manifest declares an `image` (or
+   `image_url` / `properties.files[].uri`) reference, the commitment
+   identifier of that referenced asset (resolved leaf CID or Arweave
+   tx-id) MUST equal `media_commitment`. Failure: report step 4.
+
+   If `metadata_commitment` is absent ("chain-as-manifest case"): step 4
+   is satisfied iff `edition_id`, `serial`, `edition_size`, and
+   `media_commitment` were all read from chain in step 1 AND steps 2–3
+   passed. The chain-state itself is the manifest; no off-chain JSON can
+   disagree with it, so no additional check applies.
 5. If any step fails, the token is NOT conforming under this
    specification. The verifier MUST report which step failed.
 
@@ -295,6 +421,39 @@ profile-constrained branch: fxhash gentk v1 mints each token_id as a
 1/1 unique iteration, and the verifier pins `edition_size=1`. A
 verifier re-using this adapter for non-1/1 FA2 contracts MUST override
 both `edition_size` and the uniqueness claim.
+
+### 5.4 Transaction-committed media integrity (Arweave and similar)
+
+Under the §4.3b branch (`commitment_type = "arweave-tx-id"` or any
+future commitment type that names an on-chain transaction
+rather than a content hash), the verifier's step-3 guarantee is
+strictly weaker than under §4.3a:
+
+- **What IS detected under §4.3b.** Any substitution that changes
+  `data.size` or that changes the envelope-advertised Content-Type is
+  caught — this covers byte-level append/truncate, role-confusion
+  (swapping a JSON manifest for an image payload or vice versa), and
+  any attack that cannot simultaneously corrupt BOTH the raw-byte
+  surface AND the envelope-index surface in a mutually-consistent way.
+- **What is NOT detected under §4.3b.** A byte-identical-length
+  substitution that preserves Content-Type — i.e. the attacker replaces
+  the bytes at the commitment identifier with a different payload of
+  identical length and compatible MIME — cannot be detected under this
+  branch, because the on-chain commitment is not itself a hash of the
+  served bytes. A full §5.1-equivalent guarantee requires the verifier
+  to reconstruct `data_root` locally per the Arweave chunk-merkle spec,
+  which is permitted by §4.3b but not required in v0.7.
+
+Adapters operating under §4.3b MUST document this trust gap in their
+README, name the two specific surfaces they cross-check (the byte
+CDN URL template and the envelope-index URL / query shape), and name
+the two organisations operating those surfaces. The reference
+`solana-metaplex` adapter satisfies this by documenting its use of
+`arweave.net/raw/<tx_id>` for bytes and `arweave.net/graphql` for the
+envelope; a production deployment SHOULD configure the two surfaces
+to resolve through independent operators (e.g. a second gateway's raw
+route paired with a peer-node envelope query) rather than two
+endpoints of the same CDN.
 
 ## 6. Out of Scope (Permanent Limits)
 
@@ -409,6 +568,40 @@ The v0.6 reference set satisfies §7.2 as follows:
   storage via `tokenURI` string; Flow supplies chain-as-manifest
   via `MetadataViews` resource field reads.
 
+### 7.3 Cross-chain media-layer coverage
+
+The reference set of adapters MUST collectively exercise AT LEAST
+TWO distinct media-integrity primitives, differentiated by the
+`commitment_type` axis introduced in §3. An adapter set covering
+only `ipfs-cid-sha256` would encode, implicitly, that OPO's §4 step
+3 is soundly defined only under a single content-hash primitive —
+which §4.3b demonstrates it is not.
+
+The v0.7 reference set satisfies §7.3 as follows:
+
+- `ipfs-cid-sha256` — Flow Top Shot, ERC-721 (Azuki + Pudgy Penguins),
+  Tezos FA2 fxhash gentk. Step 3 verifies sha2-256 of returned bytes
+  against the multihash in the on-chain CID.
+- `arweave-tx-id` — Solana Metaplex Token Metadata v1. Step 3 performs
+  a two-surface cross-check per §4.3b.
+
+Rationale. §7.2 established that a spec claiming cross-chain
+applicability cannot rest on a single chain family's ownership model.
+§7.3 is the parallel claim for the media layer: a spec whose only
+integrity primitive is sha2-256-of-CID has a very different failure
+surface than a spec forced to reason about transaction-committed
+storage, and conflating them behind a single CID-typed field is a
+silent-assumption bug the spec itself should surface. The v0.7
+introduction of `commitment_type` + the Arweave-backed reference
+adapter closes that gap.
+
+An adopter implementing OPO for a chain family whose dominant media
+layer is neither IPFS-with-sha256 nor Arweave (e.g. a chain where
+media lives in calldata, on a purpose-built storage layer like
+Shadow Drive, or under a post-quantum hash primitive) SHOULD
+contribute a new `commitment_type` value under §8 and a §4.3c
+retrieval-and-integrity procedure documenting its trust assumption.
+
 ## 8. Adapters
 
 An adapter binds OPO field names to a specific chain's read methods. Adapters
@@ -443,6 +636,8 @@ This repository provides reference adapters for:
 - Flow + Cadence resource model (`/adapters/flow-topshot/`).
 - EVM + ERC-721 with ERC-721 Metadata extension (`/adapters/erc721-generic/`).
 - Tezos + FA2 single-edition profile (`/adapters/tezos-fa2/`).
+- Solana + SPL Token + Metaplex Token Metadata v1 + Arweave
+  (`/adapters/solana-metaplex/`).
 
 ### 8.1 Tezos FA2 adapter specifics
 
@@ -465,6 +660,61 @@ endpoint once and matching them by path-annotation. The adapter
 SHOULD ship a pointer table keyed by contract address rather than
 re-reading the script on every verification; re-derivation is
 needed only when the pointer table is updated.
+
+### 8.3 Solana Metaplex adapter specifics
+
+The `solana-metaplex` reference adapter is bound to the Metaplex
+Token Metadata v1 single-edition (1/1) profile:
+
+- SPL Token mint account with `decimals == 0` and `supply == 1`.
+- Metaplex Token Metadata v1 PDA keyed by the mint, derived per the
+  Metaplex program convention:
+
+  ```
+  PDA = findProgramAddress(
+    [ "metadata",
+      MetadataProgramId = metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s,
+      mint ],
+    MetadataProgramId)
+  ```
+
+- Manifest URI is parsed from the `uri` field of the Metaplex
+  Metadata v1 Borsh layout and MUST resolve to Arweave
+  (`https://arweave.net/<tx_id>` or `ar://<tx_id>`).
+- Media URI is parsed from the manifest JSON's `image` (or
+  `properties.files[0].uri` as fallback) and MUST also resolve to
+  Arweave.
+
+**Holder branch.** The adapter uses the §4 step 1 **discovered-holder**
+branch: it queries `getTokenLargestAccounts(mint)` for the token
+account holding supply 1, then reads that token account's owner
+field (bytes 32..64 of the SPL Token Account layout) as `holder`.
+No holder input is required from the caller.
+
+**PDA pointer table.** Deriving a Metaplex PDA requires an ed25519
+off-curve check (to find the highest bump whose candidate address is
+NOT a valid curve point). Rather than ship a pure-JS ed25519
+implementation for a constant that is computable once per mint, the
+adapter maintains `MINT_METADATA_PDAS`, a table of pre-derived PDAs
+keyed by mint address. A verifier MAY re-derive any entry
+independently using any Solana SDK (`@solana/web3.js`'s
+`PublicKey.findProgramAddressSync`) and compare. This parallels
+§8.1's per-contract big-map pointer table.
+
+**Commitment type.** `commitment_type = "arweave-tx-id"`. The step-3
+integrity check follows §4.3b: the adapter fetches bytes from
+`arweave.net/raw/<tx_id>` and cross-checks `data.size` and
+`tags[Content-Type]` via a GraphQL query to
+`arweave.net/graphql`. Section §5.4 applies: this is weaker than
+§5.1 and the adapter's README documents the gap. A future version
+reconstructing `data_root` locally per the Arweave chunk-merkle
+spec would upgrade the guarantee without changing the result
+envelope shape.
+
+**RPC selection.** Public Solana RPC endpoints increasingly disable
+`getProgramAccounts` and `getTokenLargestAccounts`; the adapter
+defaults to an endpoint (`https://solana-rpc.publicnode.com`) that
+permits both, and allows override via `OPO_SOLANA_RPC`.
 
 ## 9. Versioning
 

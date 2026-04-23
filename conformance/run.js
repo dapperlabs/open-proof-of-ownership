@@ -16,6 +16,10 @@
 //   path-map-2.json               -- { "<cid>/<path>": "<leafCid>" } (second gateway, optional)
 //   ipfs-<cid>.raw                -- raw IPLD block bytes
 //   bigmap-<id>-<script_expr_hash>.json -- tezos big-map entry (tezos-fa2)
+//   sol-accountinfo-<pubkey>.json -- solana getAccountInfo result.value
+//   sol-tokenlargest-<mint>.json  -- solana getTokenLargestAccounts result.value
+//   ar-raw-<txid>.bin             -- arweave raw transaction data bytes
+//   ar-gql-<txid>.json            -- arweave GraphQL transaction envelope
 
 const fs = require("fs");
 const path = require("path");
@@ -66,6 +70,33 @@ function fixtureTransport(fixtureDir) {
       if (!fs.existsSync(p)) {
         if (fs.existsSync(p + ".404")) return null;
         throw new Error(`tezos bigmap fixture missing: ${p}`);
+      }
+      return JSON.parse(fs.readFileSync(p, "utf8"));
+    },
+    // solana-metaplex
+    async solGetAccountInfoBase64(pubkey) {
+      const p = path.join(fixtureDir, `sol-accountinfo-${pubkey}.json`);
+      if (!fs.existsSync(p)) {
+        if (fs.existsSync(p + ".null")) return null;
+        throw new Error(`solana accountinfo fixture missing: ${p}`);
+      }
+      return JSON.parse(fs.readFileSync(p, "utf8"));
+    },
+    async solGetTokenLargestAccounts(mint) {
+      const p = path.join(fixtureDir, `sol-tokenlargest-${mint}.json`);
+      if (!fs.existsSync(p)) throw new Error(`solana tokenlargest fixture missing: ${p}`);
+      return JSON.parse(fs.readFileSync(p, "utf8"));
+    },
+    async arweaveGetRaw(txId) {
+      const p = path.join(fixtureDir, `ar-raw-${txId}.bin`);
+      if (!fs.existsSync(p)) throw new Error(`arweave raw fixture missing: ${p}`);
+      return fs.readFileSync(p);
+    },
+    async arweaveGqlTx(txId) {
+      const p = path.join(fixtureDir, `ar-gql-${txId}.json`);
+      if (!fs.existsSync(p)) {
+        if (fs.existsSync(p + ".null")) return null;
+        throw new Error(`arweave gql fixture missing: ${p}`);
       }
       return JSON.parse(fs.readFileSync(p, "utf8"));
     },

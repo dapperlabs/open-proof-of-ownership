@@ -1,5 +1,5 @@
 {
-  "spec_version": "0.6",
+  "spec_version": "0.7",
   "vectors": [
     {
       "id": "flow-topshot-pass-1",
@@ -247,6 +247,59 @@
         "failed_step": 3
       },
       "notes": "Real ledger + token_metadata fixtures (chain reads pass step 1), but the IPFS raw block for the manifest CID `QmagGP...tbY` has had a single 0xFF byte appended. sha256 of the tampered bytes no longer matches the CIDv0 multihash digest; adapter fails step 3 on metadata_cid_hash. Demonstrates that SPEC §4 step 3 catches byte-level substitution equally on Tezos's manifest path as on Flow's and Ethereum's."
+    },
+    {
+      "id": "solana-okaybears-collection-pass",
+      "adapter": "solana-metaplex",
+      "input": {
+        "chain": "solana-mainnet",
+        "contract": "3saAedkM9o5g1u5DCqsuMZuC4GRqPB4TuMkvSsSVvGQ3",
+        "holder": "4s1BwwyHVnRi9aJaHGKRN15hjKRLCDVkYcDYtAKX4EEs"
+      },
+      "fixture": "fixtures/solana-okaybears-pass",
+      "expected": {
+        "result": "conforming",
+        "failed_step": null,
+        "fields_present": ["chain", "contract", "token_id", "edition_id", "serial", "edition_size", "holder", "media_commitment", "metadata_commitment"],
+        "field_values": {
+          "edition_size": 1,
+          "serial": 1,
+          "holder": "4s1BwwyHVnRi9aJaHGKRN15hjKRLCDVkYcDYtAKX4EEs",
+          "metadata_commitment": "Us1XHZL6V-72DYA35Pp6kTFZhm-zf54JF_tgoYJ3UJQ",
+          "media_commitment": "7QhZL8C-lAWmCFbQ9saAh3ythEhBFhv0YCzKpwFRR6c"
+        }
+      },
+      "notes": "Real mainnet Solana NFT: Okay Bears collection NFT mint `3saAe...VvGQ3` at holder `4s1Bw...4EEs` (the creator wallet; a freeze-authority-held Metaplex collection parent NFT). On-chain Metaplex metadata URI is `https://arweave.net/Us1XHZL6V-72DYA35Pp6kTFZhm-zf54JF_tgoYJ3UJQ` (commitment_type=arweave-tx-id, not IPFS). The manifest's `image` is `https://arweave.net/7QhZL8C-lAWmCFbQ9saAh3ythEhBFhv0YCzKpwFRR6c`. Step 3 follows the SPEC §5.4 tx-committed branch (size + Content-Type cross-check against arweave GraphQL), NOT the §5.1 content-addressed hash check that IPFS adapters use. Live re-run: `OPO_LIVE=1 node conformance/run.js adapters/solana-metaplex/verify.js --vector solana-okaybears-collection-pass`."
+    },
+    {
+      "id": "solana-okaybears-collection-fail-step1-wrong-holder",
+      "adapter": "solana-metaplex",
+      "input": {
+        "chain": "solana-mainnet",
+        "contract": "3saAedkM9o5g1u5DCqsuMZuC4GRqPB4TuMkvSsSVvGQ3",
+        "holder": "1nc1nerator11111111111111111111111111111111"
+      },
+      "fixture": "fixtures/solana-okaybears-fail-step1",
+      "expected": {
+        "result": "not_conforming",
+        "failed_step": 1
+      },
+      "notes": "Real chain fixtures (mint + token-account + metadata PDA reads succeed), but the claimed holder `1nc1nerator...` is the Solana burn address, which does NOT match the chain-derived holder `4s1Bw...4EEs`. Adapter fails step 1 on `holder_claim_match`. Exercises the discovered-holder branch's optional claimed-holder verification, parallel to the Tezos adapter's confirmed-holder branch fail case (different primitive, same step-1-failure outcome)."
+    },
+    {
+      "id": "solana-okaybears-collection-fail-step3-image-tampered",
+      "adapter": "solana-metaplex",
+      "input": {
+        "chain": "solana-mainnet",
+        "contract": "3saAedkM9o5g1u5DCqsuMZuC4GRqPB4TuMkvSsSVvGQ3",
+        "holder": "4s1BwwyHVnRi9aJaHGKRN15hjKRLCDVkYcDYtAKX4EEs"
+      },
+      "fixture": "fixtures/solana-okaybears-fail-step3",
+      "expected": {
+        "result": "not_conforming",
+        "failed_step": 3
+      },
+      "notes": "Real chain + arweave metadata fixtures (steps 1, 2 pass; metadata tx cross-check passes), but the image tx raw-bytes fixture `7QhZL...FRR6c` has had a single 0xFF byte appended. The bytes-length no longer matches `data.size` advertised by the arweave GraphQL index for that tx_id; adapter fails step 3 on `media_tx_crosscheck`. Demonstrates that SPEC §5.4's weaker integrity check (size+content-type cross-check) STILL detects byte-level append/truncation attacks against a tx-committed media layer — the attacker would also have to compromise the GraphQL-indexing gateway's view of `data.size` to evade detection, which is the quantitative asymmetry against §5.1's single-gateway content-hash check."
     }
   ]
 }

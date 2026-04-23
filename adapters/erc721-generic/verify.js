@@ -457,10 +457,13 @@ async function verify(input, opts = {}) {
 }
 
 function envelope(fields, steps, failed_step) {
+  const typedFields = { ...fields, commitment_type: "ipfs-cid-sha256" };
+  if (fields.media_cid) typedFields.media_commitment = fields.media_cid;
+  if (fields.metadata_cid) typedFields.metadata_commitment = fields.metadata_cid;
   return {
-    spec_version: "0.6",
+    spec_version: "0.7",
     result: failed_step === null ? "conforming" : "not_conforming",
-    fields,
+    fields: typedFields,
     steps,
     failed_step,
   };
