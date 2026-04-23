@@ -31,7 +31,20 @@ const SELECTOR_TOKEN_URI    = "0xc87b56dd"; // tokenURI(uint256)
 const SELECTOR_TOTAL_SUPPLY = "0x18160ddd"; // totalSupply()
 
 const DEFAULT_RPC = process.env.OPO_ETH_RPC || "https://ethereum-rpc.publicnode.com";
-const DEFAULT_IPFS_GW = process.env.OPO_IPFS_GW || "https://dweb.link/ipfs/";
+// Default primary gateway: gateway.pinata.cloud (Pinata Cloud, Inc.). Chosen
+// as primary because it accepts path-style GET `/<dirCID>/<path>?format=raw`
+// and returns raw-block bytes directly. ipfs.io and dweb.link also resolve
+// the path but redirect path-style GET to trustless-gateway.link which
+// returns 406 (HEAD-only for raw blocks). The verifier needs bytes to run
+// SPEC §4 step 3 (sha256 against the leaf CID), so the primary MUST serve
+// bytes on GET.
+const DEFAULT_IPFS_GW = process.env.OPO_IPFS_GW || "https://gateway.pinata.cloud/ipfs/";
+// Default secondary gateway: ipfs.io (Interplanetary Shipyard) — independent
+// operator from Pinata Cloud, Inc. Used only when OPO_IPFS_CROSSCHECK=1
+// (SPEC §4 step 3 OPTIONAL strengthening). The secondary is probed with
+// HEAD rather than GET: we need only the leaf CID from the response
+// headers (x-ipfs-roots or etag), not the bytes. HEAD succeeds at ipfs.io
+// where GET would return 406 for path-style raw requests.
 const DEFAULT_IPFS_GW_2 = process.env.OPO_IPFS_GW_2 || "https://ipfs.io/ipfs/";
 
 // --- transport -------------------------------------------------------------
@@ -80,8 +93,13 @@ function makeTransport({
     // directory CID — a substitution attack by a single gateway would
     // require collusion with the second to go undetected.
     async resolveIpfsPath2(dirCid, path) {
+      // HEAD rather than GET: the cross-check only needs the leaf CID
+      // advertised in `x-ipfs-roots` or the ETag. Many public gateways
+      // (ipfs.io, dweb.link) answer HEAD but redirect path-style raw GETs
+      // to trustless-gateway.link which 406s.
       const url = `${ipfsGw2}${dirCid}/${path}?format=raw`;
       const res = await fetchImpl(url, {
+        method: "HEAD",
         headers: { "accept": "application/vnd.ipld.raw" },
         redirect: "follow",
       });

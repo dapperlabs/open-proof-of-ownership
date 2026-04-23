@@ -114,7 +114,7 @@
           "media_cid": "QmfQbRhnw6jLPyqf9zDmT6nMbAwZzfHh26XKdKN3cka6Kr"
         }
       },
-      "notes": "Two-of-two gateway agreement. Primary gateway dweb.link and independent gateway ipfs.io both return the same leaf CIDs for Azuki #9999's metadata and image paths. x-ipfs-roots headers captured live on 2026-04-23: `QmZcH4YvBVVRJtdn4RdbaqgspFU8gH6P9vomDpBVpAL3u4,Qme4i1jbJvY8mfDWfFXLKh1ZLy1WtKh4edHXdFWfA61Fps` and `QmYDvPAXtiJg7s8JdRBSLWdgSphQdac8j1YuQNNxcGE1hg,QmfQbRhnw6jLPyqf9zDmT6nMbAwZzfHh26XKdKN3cka6Kr`. Exercises SPEC v0.4 §5 trust-assumption strengthening."
+      "notes": "Two-of-two gateway agreement. Primary gateway gateway.pinata.cloud (Pinata Cloud, Inc.) and independent second gateway ipfs.io (Interplanetary Shipyard) both advertise the same leaf CIDs for Azuki #9999's metadata and image paths. Probed live 2026-04-23: gateway.pinata.cloud returns the leaf CID via `etag: \"<cid>.raw\"` on path-style GET (200 + raw bytes); ipfs.io returns `x-ipfs-roots: QmZcH4YvBVVRJtdn4RdbaqgspFU8gH6P9vomDpBVpAL3u4,Qme4i1jbJvY8mfDWfFXLKh1ZLy1WtKh4edHXdFWfA61Fps` via HEAD (GET 406s through its trustless-gateway.link redirect). The secondary is probed with HEAD because the cross-check only needs the header-advertised leaf CID, not bytes. Exercises SPEC v0.4 §5 trust-assumption strengthening."
     },
     {
       "id": "erc721-azuki-9999-fail-crosscheck-mismatch",

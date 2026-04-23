@@ -135,10 +135,15 @@ A verifier MUST, for any token under test:
    query a second independent non-issuer gateway for the same
    `<dirCID>/<path>` and require that both gateways advertise the same
    leaf CID in their response headers. The two gateways MUST be operated
-   by independent organisations (e.g. `dweb.link` and `ipfs.io`); two
-   endpoints of a single operator do NOT satisfy independence. If the two
-   leaf CIDs disagree, the verifier MUST fail step 3 with a cross-check
-   error. Agreement weakens the v0.3 "single-gateway directory traversal
+   by independent organisations (e.g. `gateway.pinata.cloud` and
+   `ipfs.io`); two endpoints of a single operator do NOT satisfy
+   independence. The second gateway MAY be probed with `HEAD` rather than
+   `GET` — only the header-advertised leaf CID is needed, not the raw
+   bytes. (In practice, some public gateways answer `HEAD` for path-style
+   raw requests where `GET` would be refused by a downstream trustless
+   gateway; `HEAD` is the more portable probe.) If the two leaf CIDs
+   disagree, the verifier MUST fail step 3 with a cross-check error.
+   Agreement weakens the v0.3 "single-gateway directory traversal
    correctness" assumption to "collusion between two independent gateways
    would be required for substitution to go undetected." The second
    gateway's bytes need not be hashed; the hash check against the primary
@@ -181,9 +186,9 @@ A verifier under OPO trusts:
   compromised gateway can no longer silently substitute. The verifier
   is responsible for choosing gateways whose operators have no shared
   ownership, infrastructure, or anchoring; this repository's reference
-  adapter defaults to `dweb.link` (Protocol Labs) and `ipfs.io`
-  (Interplanetary Shipyard), which are operated by distinct entities as
-  of 2026-04.
+  adapter defaults to `ipfs.io` (Interplanetary Shipyard) as primary
+  and `gateway.pinata.cloud` (Pinata Cloud, Inc.) as secondary, which
+  are operated by distinct entities as of 2026-04.
 
 A verifier under OPO does NOT trust:
 

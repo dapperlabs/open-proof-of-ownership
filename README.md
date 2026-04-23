@@ -17,7 +17,8 @@ consensus and the CID hash function.
 - `/adapters/erc721-generic/` — reference adapter, MIT. Four ERC-721 vectors
   (Azuki #9999 pass + image-tampered fail + two-gateway cross-check pass +
   cross-check mismatch fail) round-trip offline; live mode verifies against
-  Ethereum mainnet + dweb.link + ipfs.io.
+  Ethereum mainnet + gateway.pinata.cloud (primary) + ipfs.io (cross-check
+  secondary, HEAD).
 - Live Example 1: [topshot-auth-portal.vercel.app](https://topshot-auth-portal.vercel.app)
   — verifies `A.0b2a3299cc857e29.TopShot` on Flow mainnet under this spec.
 
@@ -42,12 +43,12 @@ node adapters/flow-topshot/verify.js \
   --token-id 40105574 \
   --holder 0x0bb3b2a249ca6822
 
-# Verify one live Azuki (ERC-721) token against Ethereum mainnet + dweb.link
+# Verify one live Azuki (ERC-721) token against Ethereum mainnet + gateway.pinata.cloud
 node adapters/erc721-generic/verify.js \
   --contract 0xED5AF388653567Af2F388E6224dC7C4b3241C544 \
   --token-id 9999
 
-# Same Azuki token with the two-gateway cross-check active (dweb.link + ipfs.io)
+# Same Azuki token with the two-gateway cross-check active (gateway.pinata.cloud + ipfs.io)
 OPO_IPFS_CROSSCHECK=1 node adapters/erc721-generic/verify.js \
   --contract 0xED5AF388653567Af2F388E6224dC7C4b3241C544 \
   --token-id 9999
@@ -81,7 +82,7 @@ An implementation is **conforming** if it produces the expected
 node conformance/run.js adapters/flow-topshot/verify.js
 node conformance/run.js adapters/erc721-generic/verify.js
 
-# Live — replay each vector against the live chain + dweb.link.
+# Live — replay each vector against the live chain + a public IPFS gateway.
 OPO_LIVE=1 node conformance/run.js adapters/flow-topshot/verify.js
 OPO_LIVE=1 node conformance/run.js adapters/erc721-generic/verify.js
 ```

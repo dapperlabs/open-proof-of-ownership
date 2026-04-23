@@ -43,11 +43,14 @@ Set `OPO_IPFS_CROSSCHECK=1` (or pass `crosscheck: true` in `verify()`
 opts) to require that an independent second gateway advertises the same
 leaf CID for the same `<dirCID>/<path>`. The default second gateway is
 `https://ipfs.io/ipfs/` (Interplanetary Shipyard), independent of the
-default primary `https://dweb.link/ipfs/` (Protocol Labs). Override via
-`OPO_IPFS_GW_2`. A disagreement between the two gateways fails step 3
-with a `crosscheck mismatch` error. Agreement weakens the single-gateway
-traversal-correctness assumption to a collusion-between-two-operators
-assumption.
+default primary `https://gateway.pinata.cloud/ipfs/` (Pinata Cloud,
+Inc.). Override via `OPO_IPFS_GW_2`. The secondary is probed with
+`HEAD` — the cross-check only needs the leaf CID advertised in
+`x-ipfs-roots` or the ETag, not the raw bytes (the bytes-to-CID hash
+check runs against the primary). A disagreement between the two
+gateways fails step 3 with a `crosscheck mismatch` error. Agreement
+weakens the single-gateway traversal-correctness assumption to a
+collusion-between-two-operators assumption.
 
 ## Non-conforming cases
 
@@ -66,12 +69,12 @@ hold — the adapter surfaces the failed step rather than synthesize a value:
 - The configured RPC endpoint (`OPO_ETH_RPC`, default
   `https://ethereum-rpc.publicnode.com`). Verifier MAY rotate across
   multiple RPCs and require agreement.
-- IPFS gateway reachability for `OPO_IPFS_GW` (default `dweb.link`). The
-  gateway's UnixFS path resolution is trusted only to the extent described
-  in SPEC §5 — any byte tamper is still detected against the returned
-  leaf CID. When `OPO_IPFS_CROSSCHECK=1` is set, a second gateway
-  (`OPO_IPFS_GW_2`, default `ipfs.io`) is consulted and the two leaf
-  CIDs MUST agree.
+- IPFS gateway reachability for `OPO_IPFS_GW` (default
+  `gateway.pinata.cloud`). The gateway's UnixFS path resolution is trusted
+  only to the extent described in SPEC §5 — any byte tamper is still
+  detected against the returned leaf CID. When `OPO_IPFS_CROSSCHECK=1` is
+  set, a second gateway (`OPO_IPFS_GW_2`, default `ipfs.io`) is consulted
+  via HEAD and the two leaf CIDs MUST agree.
 
 ## Live invocation
 
@@ -97,10 +100,10 @@ Override RPC and gateway with `OPO_ETH_RPC` and `OPO_IPFS_GW`.
   one trailing `0xFF` byte appended to the image root block, synthesizing a
   step-3 failure.
 - `conformance/fixtures/erc721-azuki-9999-pass-crosscheck/` — pass fixture
-  extended with `path-map-2.json` capturing the independent ipfs.io gateway's
-  `x-ipfs-roots` response for the same two directory paths (probed live
-  2026-04-23). Both gateways advertise identical leaf CIDs; the cross-check
-  passes.
+  extended with `path-map-2.json` capturing the independent second gateway's
+  `x-ipfs-roots` response (via HEAD) for the same two directory paths
+  (probed live 2026-04-23). Both gateways advertise identical leaf CIDs;
+  the cross-check passes.
 - `conformance/fixtures/erc721-azuki-9999-fail-crosscheck-mismatch/` —
   pass fixture extended with a synthetic `path-map-2.json` where the
   second gateway returns a different leaf CID for the tokenURI directory
