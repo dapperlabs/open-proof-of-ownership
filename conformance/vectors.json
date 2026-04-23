@@ -1,5 +1,5 @@
 {
-  "spec_version": "0.1",
+  "spec_version": "0.2",
   "vectors": [
     {
       "id": "flow-topshot-pass-1",
@@ -7,42 +7,55 @@
       "input": {
         "chain": "flow-mainnet",
         "contract": "A.0b2a3299cc857e29.TopShot",
-        "token_id": "1234567"
+        "token_id": "40105574",
+        "holder": "0x0bb3b2a249ca6822"
       },
+      "fixture": "fixtures/flow-topshot-pass-1",
       "expected": {
         "result": "conforming",
         "failed_step": null,
-        "fields_present": ["chain", "contract", "token_id", "edition_id", "serial", "edition_size", "holder", "media_cid", "metadata_cid"]
+        "fields_present": ["chain", "contract", "token_id", "edition_id", "serial", "edition_size", "holder", "media_cid"],
+        "field_values": {
+          "edition_id": "90",
+          "serial": 1112,
+          "edition_size": 16000,
+          "holder": "0x0bb3b2a249ca6822",
+          "media_cid": "QmQbnTEh2FHct49adwcLc6U5qQqEGvwXpzSBQ8A5FSsmKR"
+        }
       },
-      "notes": "A live, currently-held Top Shot Moment. Run via gateway dweb.link."
+      "notes": "Real mainnet Top Shot Moment 40105574 at holder 0x0bb3b2a249ca6822 (Set 90, serial 1112 of 16000, Sam Hauser 3 Pointer). Fixture captures the live Flow REST response + the raw IPFS block. A third party MAY re-run live with `OPO_LIVE=1 node conformance/run.js adapters/flow-topshot/verify.js`; the recorded fixture SHALL round-trip offline."
     },
     {
-      "id": "flow-topshot-fail-serial-out-of-range",
+      "id": "flow-topshot-fail-step2-serial-out-of-range",
       "adapter": "flow-topshot",
       "input": {
         "chain": "flow-mainnet",
         "contract": "A.0b2a3299cc857e29.TopShot",
-        "token_id": "synthetic-fixture-serial-9999999"
+        "token_id": "40105574",
+        "holder": "0x0bb3b2a249ca6822"
       },
+      "fixture": "fixtures/flow-topshot-fail-step2",
       "expected": {
         "result": "not_conforming",
         "failed_step": 2
       },
-      "notes": "Synthetic fixture: serial > edition_size triggers Section 4 step 2 failure."
+      "notes": "Synthetic derivative of pass-1 with serial patched to 99999 (> edition_size 16000). Exercises SPEC §4 step 2."
     },
     {
-      "id": "flow-topshot-fail-cid-mismatch",
+      "id": "flow-topshot-fail-step3-cid-tampered",
       "adapter": "flow-topshot",
       "input": {
         "chain": "flow-mainnet",
         "contract": "A.0b2a3299cc857e29.TopShot",
-        "token_id": "synthetic-fixture-cid-tampered"
+        "token_id": "40105574",
+        "holder": "0x0bb3b2a249ca6822"
       },
+      "fixture": "fixtures/flow-topshot-fail-step3",
       "expected": {
         "result": "not_conforming",
         "failed_step": 3
       },
-      "notes": "Synthetic fixture: media bytes do not hash to declared CID."
+      "notes": "Real Flow response + IPFS raw block with a single trailing byte appended. sha256 no longer matches the multihash digest declared by CIDv0 QmQbn…smKR — exercises SPEC §4 step 3."
     },
     {
       "id": "erc721-pass-1",
@@ -57,7 +70,7 @@
         "failed_step": null,
         "fields_present": ["chain", "contract", "token_id", "edition_id", "serial", "edition_size", "holder", "media_cid", "metadata_cid"]
       },
-      "notes": "Edition fields derived from contract metadata extension; serial=token_id mod editionSize where the contract exposes edition grouping. Adapter documents the binding."
+      "notes": "ERC-721 adapter has no fixture yet; live runs require an RPC + IPFS tokenURI. Iteration 4 scope: record a fixture against a known ipfs:// tokenURI contract."
     },
     {
       "id": "erc721-fail-no-cid",
@@ -71,7 +84,7 @@
         "result": "not_conforming",
         "failed_step": 1
       },
-      "notes": "Contract returns no tokenURI / no CID — Section 4 step 1 fails."
+      "notes": "Zero-address contract — RPC returns no tokenURI. Exercises step 1 failure. Live-only (no fixture)."
     }
   ]
 }
