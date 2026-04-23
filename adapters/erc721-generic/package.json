@@ -1,0 +1,11 @@
+{
+  "name": "@opo/adapter-erc721-generic",
+  "version": "0.1.0",
+  "description": "OPO reference adapter — generic ERC-721 + IPFS metadata",
+  "main": "verify.js",
+  "license": "MIT",
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "minimist": "^1.2.8"
+  }
+}

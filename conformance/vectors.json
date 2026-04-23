@@ -1,0 +1,77 @@
+{
+  "spec_version": "0.1",
+  "vectors": [
+    {
+      "id": "flow-topshot-pass-1",
+      "adapter": "flow-topshot",
+      "input": {
+        "chain": "flow-mainnet",
+        "contract": "A.0b2a3299cc857e29.TopShot",
+        "token_id": "1234567"
+      },
+      "expected": {
+        "result": "conforming",
+        "failed_step": null,
+        "fields_present": ["chain", "contract", "token_id", "edition_id", "serial", "edition_size", "holder", "media_cid", "metadata_cid"]
+      },
+      "notes": "A live, currently-held Top Shot Moment. Run via gateway dweb.link."
+    },
+    {
+      "id": "flow-topshot-fail-serial-out-of-range",
+      "adapter": "flow-topshot",
+      "input": {
+        "chain": "flow-mainnet",
+        "contract": "A.0b2a3299cc857e29.TopShot",
+        "token_id": "synthetic-fixture-serial-9999999"
+      },
+      "expected": {
+        "result": "not_conforming",
+        "failed_step": 2
+      },
+      "notes": "Synthetic fixture: serial > edition_size triggers Section 4 step 2 failure."
+    },
+    {
+      "id": "flow-topshot-fail-cid-mismatch",
+      "adapter": "flow-topshot",
+      "input": {
+        "chain": "flow-mainnet",
+        "contract": "A.0b2a3299cc857e29.TopShot",
+        "token_id": "synthetic-fixture-cid-tampered"
+      },
+      "expected": {
+        "result": "not_conforming",
+        "failed_step": 3
+      },
+      "notes": "Synthetic fixture: media bytes do not hash to declared CID."
+    },
+    {
+      "id": "erc721-pass-1",
+      "adapter": "erc721-generic",
+      "input": {
+        "chain": "ethereum-mainnet",
+        "contract": "0xb47e3cd837ddf8e4c57f05d70ab865de6e193bbb",
+        "token_id": "100"
+      },
+      "expected": {
+        "result": "conforming",
+        "failed_step": null,
+        "fields_present": ["chain", "contract", "token_id", "edition_id", "serial", "edition_size", "holder", "media_cid", "metadata_cid"]
+      },
+      "notes": "Edition fields derived from contract metadata extension; serial=token_id mod editionSize where the contract exposes edition grouping. Adapter documents the binding."
+    },
+    {
+      "id": "erc721-fail-no-cid",
+      "adapter": "erc721-generic",
+      "input": {
+        "chain": "ethereum-mainnet",
+        "contract": "0x0000000000000000000000000000000000000000",
+        "token_id": "1"
+      },
+      "expected": {
+        "result": "not_conforming",
+        "failed_step": 1
+      },
+      "notes": "Contract returns no tokenURI / no CID — Section 4 step 1 fails."
+    }
+  ]
+}

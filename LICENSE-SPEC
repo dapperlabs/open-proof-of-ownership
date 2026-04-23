@@ -1,0 +1,9 @@
+CC0 1.0 Universal — Public Domain Dedication
+
+The text of SPEC.md and the JSON schemas under /conformance/ are dedicated to
+the public domain by the authors, to the extent permitted by law. No rights
+reserved. See https://creativecommons.org/publicdomain/zero/1.0/legalcode for
+the full legal text.
+
+Code in this repository (everything outside SPEC.md and /conformance/) is
+licensed under MIT — see LICENSE.

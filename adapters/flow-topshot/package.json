@@ -1,0 +1,11 @@
+{
+  "name": "@opo/adapter-flow-topshot",
+  "version": "0.1.0",
+  "description": "OPO reference adapter — Flow + A.0b2a3299cc857e29.TopShot",
+  "main": "verify.js",
+  "license": "MIT",
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "minimist": "^1.2.8"
+  }
+}
