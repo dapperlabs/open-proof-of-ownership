@@ -37,7 +37,7 @@ This preserves content-addressed integrity (any byte tamper fails step 3)
 while adding one documented trust assumption: the gateway performs UnixFS
 directory traversal correctly.
 
-### Two-gateway cross-check (OPTIONAL, SPEC v0.4 §4 step 3)
+### Two-gateway cross-check (OPTIONAL, SPEC §4 step 3)
 
 Set `OPO_IPFS_CROSSCHECK=1` (or pass `crosscheck: true` in `verify()`
 opts) to require that an independent second gateway advertises the same
@@ -88,25 +88,56 @@ Override RPC and gateway with `OPO_ETH_RPC` and `OPO_IPFS_GW`.
 
 ## Fixtures
 
+Seven vectors across two independent contracts. Together they satisfy
+SPEC §7.1 generic-adapter coverage on all three encoding axes — baseURI
+CID version, metadata leaf codec, image payload layout.
+
+### Azuki — `0xED5AF388653567Af2F388E6224dC7C4b3241C544`
+
+Encoding signature: CIDv0 baseURI · dag-pb (UnixFS-inline) metadata leaf ·
+UnixFS-inline image root.
+
 - `conformance/fixtures/erc721-azuki-9999-pass/` — real mainnet capture for
-  Azuki #9999 (contract `0xED5AF388653567Af2F388E6224dC7C4b3241C544`,
-  holder `0x4b0207e11661e41b091697980b3d49bd59358d7c`, edition_size 10000).
-  Metadata leaf CID `Qme4i1jbJvY8mfDWfFXLKh1ZLy1WtKh4edHXdFWfA61Fps`
-  (CIDv0, 763 bytes). Image root CID
-  `QmfQbRhnw6jLPyqf9zDmT6nMbAwZzfHh26XKdKN3cka6Kr` (CIDv0, 152 bytes — the
-  root of a 3-chunk dag-pb tree over the 703,155-byte PNG; the root hash
-  binds the full Merkle tree).
+  Azuki #9999 (holder `0x4b0207e11661e41b091697980b3d49bd59358d7c`,
+  edition_size 10000). Metadata leaf CID
+  `Qme4i1jbJvY8mfDWfFXLKh1ZLy1WtKh4edHXdFWfA61Fps` (CIDv0, 763 bytes).
+  Image root CID `QmfQbRhnw6jLPyqf9zDmT6nMbAwZzfHh26XKdKN3cka6Kr` (CIDv0,
+  152 bytes — root of a 3-chunk dag-pb tree over the 703,155-byte PNG;
+  the root hash binds the full Merkle tree).
 - `conformance/fixtures/erc721-azuki-9999-fail-step3/` — same fixture with
   one trailing `0xFF` byte appended to the image root block, synthesizing a
   step-3 failure.
 - `conformance/fixtures/erc721-azuki-9999-pass-crosscheck/` — pass fixture
-  extended with `path-map-2.json` capturing the independent second gateway's
-  `x-ipfs-roots` response (via HEAD) for the same two directory paths
-  (probed live 2026-04-23). Both gateways advertise identical leaf CIDs;
-  the cross-check passes.
+  extended with `path-map-2.json` capturing the independent second
+  gateway's `x-ipfs-roots` response (via HEAD). Both gateways advertise
+  identical leaf CIDs; cross-check passes.
 - `conformance/fixtures/erc721-azuki-9999-fail-crosscheck-mismatch/` —
-  pass fixture extended with a synthetic `path-map-2.json` where the
-  second gateway returns a different leaf CID for the tokenURI directory
-  path. Models a substitution attack where a compromised primary gateway
-  substitutes a different leaf CID; the independent second gateway
-  disagrees, and the verifier fails step 3 with `crosscheck mismatch`.
+  synthetic fixture where the second gateway returns a different leaf
+  CID. Models a primary-gateway substitution attack caught by the
+  independent secondary.
+
+### Pudgy Penguins — `0xBd3531dA5CF5857e7CfAA92426877b022e612cf8`
+
+Encoding signature: **CIDv1 base32 baseURI** · **raw-codec (0x55)
+metadata leaf** · **chunked-file image root** · **two-segment image path**.
+
+- `conformance/fixtures/erc721-pudgy-1-pass/` — real mainnet capture for
+  Pudgy Penguins #1 (holder `0xcce98763ff5a9ff5baf8b15abc456077a1e84f2a`,
+  edition_size 8888). baseURI is `ipfs://bafybeibc5sgo2plmjkq2tzmhrn54bk3crhnc23zd2msg4ea7a4pxrkgfna/`
+  (CIDv1). Metadata leaf CID
+  `bafkreiclss3ogjk7tpqui5x6a3whluqjo7z6p6ndid5sn34si23koptvlu` (CIDv1
+  raw codec 0x55, 592 bytes — the bytes ARE the JSON, no UnixFS header).
+  Image ref `ipfs://QmNf1.../penguin/1.png` uses a two-segment path.
+  Image root CID `Qma6fcCGEJcVYd4DUHVQ5akPLhA5REWLKTMTnPCaxiAEtd` (CIDv0,
+  104 bytes — the root of a chunked dag-pb tree; the root-block bytes
+  carry links to child-block CIDs, the PNG bytes themselves live in
+  linked sub-blocks the verifier does not need to fetch, because each
+  link is a sha2-256 digest that the root's CID cryptographically binds).
+- `conformance/fixtures/erc721-pudgy-1-pass-crosscheck/` — pass fixture
+  extended with `path-map-2.json` capturing ipfs.io's HEAD response for
+  both directory paths (probed live 2026-04-23). Both gateways agree on
+  leaf CIDs; cross-check passes.
+- `conformance/fixtures/erc721-pudgy-1-fail-step3/` — pass fixture with
+  one `0xFF` byte appended to the image root block. sha256 no longer
+  matches the CIDv0 multihash digest; step 3 fails. This is the dag-pb
+  chunked-root analogue of the Azuki inline-UnixFS fail vector.

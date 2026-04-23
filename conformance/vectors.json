@@ -1,5 +1,5 @@
 {
-  "spec_version": "0.4",
+  "spec_version": "0.5",
   "vectors": [
     {
       "id": "flow-topshot-pass-1",
@@ -115,6 +115,65 @@
         }
       },
       "notes": "Two-of-two gateway agreement. Primary gateway gateway.pinata.cloud (Pinata Cloud, Inc.) and independent second gateway ipfs.io (Interplanetary Shipyard) both advertise the same leaf CIDs for Azuki #9999's metadata and image paths. Probed live 2026-04-23: gateway.pinata.cloud returns the leaf CID via `etag: \"<cid>.raw\"` on path-style GET (200 + raw bytes); ipfs.io returns `x-ipfs-roots: QmZcH4YvBVVRJtdn4RdbaqgspFU8gH6P9vomDpBVpAL3u4,Qme4i1jbJvY8mfDWfFXLKh1ZLy1WtKh4edHXdFWfA61Fps` via HEAD (GET 406s through its trustless-gateway.link redirect). The secondary is probed with HEAD because the cross-check only needs the header-advertised leaf CID, not bytes. Exercises SPEC v0.4 §5 trust-assumption strengthening."
+    },
+    {
+      "id": "erc721-pudgy-1-pass",
+      "adapter": "erc721-generic",
+      "input": {
+        "chain": "ethereum-mainnet",
+        "contract": "0xBd3531dA5CF5857e7CfAA92426877b022e612cf8",
+        "token_id": "1"
+      },
+      "fixture": "fixtures/erc721-pudgy-1-pass",
+      "expected": {
+        "result": "conforming",
+        "failed_step": null,
+        "fields_present": ["chain", "contract", "token_id", "edition_id", "serial", "edition_size", "holder", "media_cid", "metadata_cid"],
+        "field_values": {
+          "edition_size": 8888,
+          "serial": 1,
+          "holder": "0xcce98763ff5a9ff5baf8b15abc456077a1e84f2a",
+          "metadata_cid": "bafkreiclss3ogjk7tpqui5x6a3whluqjo7z6p6ndid5sn34si23koptvlu",
+          "media_cid": "Qma6fcCGEJcVYd4DUHVQ5akPLhA5REWLKTMTnPCaxiAEtd"
+        }
+      },
+      "notes": "Real mainnet Pudgy Penguins #1 (contract 0xBd3531dA5CF5857e7CfAA92426877b022e612cf8, 8888 supply). Exercises encoding combinations that Azuki does not: (a) CIDv1 base32 baseURI `ipfs://bafybeibc5.../1`; (b) CIDv1 raw-codec metadata leaf `bafkrei...` (multibase `b`, codec 0x55); (c) two-segment path `penguin/1.png` for the image ref; (d) chunked-file image root block of 104 bytes whose Merkle links, not inline UnixFS, anchor the PNG data. The same erc721-generic adapter that verified Azuki #9999 verifies this vector with no collection-specific code. Live re-run: `OPO_LIVE=1 node conformance/run.js adapters/erc721-generic/verify.js --vector erc721-pudgy-1-pass`."
+    },
+    {
+      "id": "erc721-pudgy-1-pass-crosscheck",
+      "adapter": "erc721-generic",
+      "input": {
+        "chain": "ethereum-mainnet",
+        "contract": "0xBd3531dA5CF5857e7CfAA92426877b022e612cf8",
+        "token_id": "1"
+      },
+      "opts": { "crosscheck": true },
+      "fixture": "fixtures/erc721-pudgy-1-pass-crosscheck",
+      "expected": {
+        "result": "conforming",
+        "failed_step": null,
+        "fields_present": ["media_cid", "metadata_cid"],
+        "field_values": {
+          "metadata_cid": "bafkreiclss3ogjk7tpqui5x6a3whluqjo7z6p6ndid5sn34si23koptvlu",
+          "media_cid": "Qma6fcCGEJcVYd4DUHVQ5akPLhA5REWLKTMTnPCaxiAEtd"
+        }
+      },
+      "notes": "Two-of-two gateway agreement for Pudgy Penguins #1. gateway.pinata.cloud (Pinata Cloud, Inc., primary, GET raw block) and ipfs.io (Interplanetary Shipyard, secondary, HEAD) both advertise `bafkreiclss3...` for `bafybeibc5.../1` AND `Qma6fcCG...` for `QmNf1.../penguin/1.png`. Probed live 2026-04-23; both gateways returned identical leaf CIDs via etag (Pinata) and x-ipfs-roots (ipfs.io). Exercises SPEC §4 step 3 cross-check branch on a DIFFERENT collection, path shape, and leaf CID version than the Azuki crosscheck vector."
+    },
+    {
+      "id": "erc721-pudgy-1-fail-step3-image-tampered",
+      "adapter": "erc721-generic",
+      "input": {
+        "chain": "ethereum-mainnet",
+        "contract": "0xBd3531dA5CF5857e7CfAA92426877b022e612cf8",
+        "token_id": "1"
+      },
+      "fixture": "fixtures/erc721-pudgy-1-fail-step3",
+      "expected": {
+        "result": "not_conforming",
+        "failed_step": 3
+      },
+      "notes": "Real RPC + metadata fixture for Pudgy Penguins #1 with a single 0xFF byte appended to the image root block `Qma6fcCG...`. sha256 no longer matches the declared CIDv0 multihash digest — exercises SPEC §4 step 3 on a dag-pb root-block (chunked file) rather than a UnixFS-inline block as in Azuki. The integrity guarantee is the same: a single byte of divergence in the root block changes its sha256 and causes step 3 to fail."
     },
     {
       "id": "erc721-azuki-9999-fail-crosscheck-mismatch",

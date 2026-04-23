@@ -458,7 +458,7 @@ async function verify(input, opts = {}) {
 
 function envelope(fields, steps, failed_step) {
   return {
-    spec_version: "0.4",
+    spec_version: "0.5",
     result: failed_step === null ? "conforming" : "not_conforming",
     fields,
     steps,

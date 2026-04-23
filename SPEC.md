@@ -1,9 +1,33 @@
-# Open Proof-of-Ownership (OPO) — Specification v0.4
+# Open Proof-of-Ownership (OPO) — Specification v0.5
 
 **Status:** Draft
 **License:** CC0 1.0 Universal (public domain)
 **Editors:** Initial publication, 2026-04
 **Repository:** github.com/dapperlabs/open-proof-of-ownership
+
+## Changes from v0.4
+
+- §7 adds a **conformance coverage requirement**: a conforming adapter
+  claiming to be "generic" for a given chain's metadata pattern (e.g.
+  `erc721-generic`) MUST ship conformance vectors covering at least two
+  distinct contracts whose CID encodings differ along at least one of
+  three axes: (a) baseURI CID version (v0 vs v1), (b) metadata leaf
+  codec (dag-pb UnixFS vs raw), (c) image payload layout (UnixFS-inline
+  vs chunked-file Merkle root). Adapters bound to a single contract are
+  exempt from this requirement.
+- §8 clarifies that the reference `erc721-generic` adapter has been
+  exercised against two independent collections (Azuki 0xED5A…C544 and
+  Pudgy Penguins 0xBd35…2cf8) whose encodings together cover all three
+  axes above — this is the minimum "generic" coverage for this class of
+  adapter in v0.5.
+- §5 adds an observation that has been true since v0.1 but was not
+  explicit: the sha2-256 hash check in step 3 is performed against the
+  returned block under the returned CID. For a chunked-file root block,
+  this binds the CID to the ROOT block's bytes; the Merkle links inside
+  that root block cryptographically bind the (unfetched) child blocks.
+  A verifier MAY, but need NOT, recursively fetch child blocks — the
+  root-block hash is a sufficient commitment to the whole file under
+  the dag-pb + UnixFS protocol.
 
 ## Changes from v0.3
 
@@ -224,6 +248,39 @@ in which every network call is satisfied from a recorded fixture under
 reproducibility without dependence on gateway or RPC availability. The same
 harness MUST also support a live mode (`OPO_LIVE=1`) that replays each
 vector against the live chain and at least one non-issuer IPFS gateway.
+
+### 7.1 Generic-adapter coverage
+
+An adapter that claims to be "generic" for a chain's dominant metadata
+pattern (e.g. `erc721-generic` for the ERC-721 Metadata extension with
+ipfs-hosted manifests) MUST ship conformance vectors drawn from AT LEAST
+TWO distinct on-chain contracts whose CID encodings differ along at
+least one of the following axes:
+
+1. **baseURI CID version.** One contract MUST use CIDv0 (multibase-
+   less, `Qm…`) and another MUST use CIDv1 (multibase-prefixed, e.g.
+   `bafy…`).
+2. **Metadata leaf codec.** One contract's metadata leaf MUST resolve
+   to a `dag-pb` (UnixFS-inline) block and another MUST resolve to a
+   `raw` (codec 0x55) block — the two common cases produced by `ipfs
+   add` on a small JSON file depending on client flags.
+3. **Image payload layout.** One contract's image CID SHOULD resolve
+   to a UnixFS-inline block (small file, bytes live in the same block
+   as the UnixFS header) and another SHOULD resolve to a chunked-file
+   root (large file whose root block carries links to sub-block CIDs,
+   no inline bytes).
+
+An adapter bound to exactly one contract (e.g. the chain-specific
+reference adapter for a single issuer's contract like Top Shot) is
+exempt from §7.1 because "generic" is not claimed.
+
+Rationale. The §4 verification procedure is defined in CID-agnostic
+terms, but an adapter can silently depend on CID v0 byte layouts, on
+UnixFS inlining, or on single-segment paths. The only way to catch
+that dependency is to run the same adapter against contracts that
+stress the other branches. The reference `erc721-generic` adapter in
+this repository covers all three axes via Azuki (CIDv0 / dag-pb /
+inline) and Pudgy Penguins (CIDv1 / raw / chunked-root).
 
 ## 8. Adapters
 

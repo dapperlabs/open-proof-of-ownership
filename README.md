@@ -10,15 +10,22 @@ consensus and the CID hash function.
 
 ## Status
 
-- `SPEC.md` — v0.4 draft. CC0. Changelog at the top of the file.
+- `SPEC.md` — v0.5 draft. CC0. Changelog at the top of the file.
 - `/conformance/` — JSON test vectors + recorded mainnet fixtures. CC0.
 - `/adapters/flow-topshot/` — reference adapter, MIT. All three Flow vectors
   round-trip offline against fixtures and live against Flow mainnet + dweb.link.
-- `/adapters/erc721-generic/` — reference adapter, MIT. Four ERC-721 vectors
-  (Azuki #9999 pass + image-tampered fail + two-gateway cross-check pass +
-  cross-check mismatch fail) round-trip offline; live mode verifies against
+- `/adapters/erc721-generic/` — reference adapter, MIT. Seven ERC-721 vectors
+  across TWO independent contracts:
+  - Azuki #9999 (CIDv0 baseURI, dag-pb metadata leaf, UnixFS-inline image):
+    pass + image-tampered fail + two-gateway cross-check pass + cross-check
+    mismatch fail.
+  - Pudgy Penguins #1 (CIDv1 base32 baseURI, raw-codec metadata leaf,
+    chunked-file image root, two-segment path): pass + cross-check pass +
+    image-tampered fail.
+  All seven round-trip offline; live mode verifies each pass vector against
   Ethereum mainnet + gateway.pinata.cloud (primary) + ipfs.io (cross-check
-  secondary, HEAD).
+  secondary, HEAD). The two collections together satisfy SPEC §7.1
+  generic-adapter coverage on all three encoding axes.
 - Live Example 1: [topshot-auth-portal.vercel.app](https://topshot-auth-portal.vercel.app)
   — verifies `A.0b2a3299cc857e29.TopShot` on Flow mainnet under this spec.
 
@@ -43,12 +50,17 @@ node adapters/flow-topshot/verify.js \
   --token-id 40105574 \
   --holder 0x0bb3b2a249ca6822
 
-# Verify one live Azuki (ERC-721) token against Ethereum mainnet + gateway.pinata.cloud
+# Verify one live Azuki (ERC-721, CIDv0) token against Ethereum mainnet + gateway.pinata.cloud
 node adapters/erc721-generic/verify.js \
   --contract 0xED5AF388653567Af2F388E6224dC7C4b3241C544 \
   --token-id 9999
 
-# Same Azuki token with the two-gateway cross-check active (gateway.pinata.cloud + ipfs.io)
+# Verify one live Pudgy Penguins (ERC-721, CIDv1) token against the same infrastructure
+node adapters/erc721-generic/verify.js \
+  --contract 0xBd3531dA5CF5857e7CfAA92426877b022e612cf8 \
+  --token-id 1
+
+# Same tokens with the two-gateway cross-check active (gateway.pinata.cloud + ipfs.io)
 OPO_IPFS_CROSSCHECK=1 node adapters/erc721-generic/verify.js \
   --contract 0xED5AF388653567Af2F388E6224dC7C4b3241C544 \
   --token-id 9999
@@ -58,7 +70,7 @@ Both adapters print the same five-step result envelope:
 
 ```json
 {
-  "spec_version": "0.4",
+  "spec_version": "0.5",
   "result": "conforming",
   "fields": { "chain": "...", "holder": "...", "media_cid": "...", "metadata_cid": "...", ... },
   "steps": [
@@ -96,11 +108,14 @@ PASS: flow-topshot-pass-1
 PASS: flow-topshot-fail-step2-serial-out-of-range
 PASS: flow-topshot-fail-step3-cid-tampered
 
-harness=OFFLINE  adapter=erc721-generic  vectors=4
+harness=OFFLINE  adapter=erc721-generic  vectors=7
 
 PASS: erc721-azuki-9999-pass
 PASS: erc721-azuki-9999-fail-step3-image-tampered
 PASS: erc721-azuki-9999-pass-crosscheck
+PASS: erc721-pudgy-1-pass
+PASS: erc721-pudgy-1-pass-crosscheck
+PASS: erc721-pudgy-1-fail-step3-image-tampered
 PASS: erc721-azuki-9999-fail-crosscheck-mismatch
 ```
 
